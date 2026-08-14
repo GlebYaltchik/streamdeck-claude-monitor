@@ -1,0 +1,35 @@
+# --- Secrets: never commit, this repository is public ---
+**/.credentials.json
+**/credentials.json
+*.token
+*.pfx
+secrets.json
+appsettings.*.local.json
+
+# Raw Claude Code transcripts and hook captures may contain paths, command
+# text and message content. Only explicitly sanitized files are allowed in.
+*.jsonl
+!tests/fixtures/**/*.jsonl
+!docs/findings/**/*.jsonl
+
+# --- .NET ---
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+*.user
+*.suo
+*.userprefs
+project.lock.json
+artifacts/
+
+# --- IDE ---
+.vs/
+.idea/
+.vscode/
+*.swp
+
+# --- Local settings ---
+.claude/settings.local.json
