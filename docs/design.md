@@ -1,46 +1,59 @@
-# ClaudeDeck — Stream Deck плагин для Claude Code
+# ClaudeDeck — a Stream Deck plugin for Claude Code
 
-Дизайн-документ и план работ. Версия 0.1 (черновик для обсуждения).
-
----
-
-## 1. Цель и рамки
-
-Физический пульт управления Claude Code: видеть состояние всех сессий и остаток лимитов не переключая окна, и одним нажатием разрешать/запрещать действия агента.
-
-**Целевое устройство:** Stream Deck + XL (9x4 клавиши + 6 энкодеров + тач-полоса).
-Плагин не должен зависеть от конкретной раскладки — набор действий проектируется так, чтобы работать и на XL, и на MK.2, и на Stream Deck +.
-
-**Платформа:** Windows (плагин), .NET 10. Агенты — кроссплатформенные (win/linux).
-
-**В рамках v1:**
-- Usage: 5-часовое и недельное окна.
-- Мониторинг сессий: состояние + заполненность контекста.
-- Approve/Deny действий с пульта.
-- Сессии на Windows и в WSL2.
-
-**За рамками v1 (но архитектура не должна мешать):** удалённые машины по SSH, отправка промптов в сессию, управление режимом permissions внутри самой сессии, macOS/Linux хост.
+Design document. Version 0.1 (draft for discussion).
 
 ---
 
-## 2. Ключевая проблема: откуда брать данные
+## 1. Goal and scope
 
-Claude Code не имеет публичного API для внешнего наблюдателя. Есть четыре канала, и каждая фича собирается из своей комбинации.
+A physical control surface for Claude Code: see the state of every session and what is
+left of your usage limits without switching windows, and allow or deny what the agent
+wants to do with a single key press.
 
-| Канал | Что даёт | Надёжность |
+**Target device:** Stream Deck + XL (9x4 keys, 6 encoders, touch strip).
+The plugin must not depend on a specific layout — actions are designed to work on the
+XL, the MK.2 and the Stream Deck + alike.
+
+**Platform:** Windows for the plugin, .NET 10. Agents are cross-platform (Windows and
+Linux).
+
+**In scope for v1:**
+- Usage: the 5-hour and weekly windows.
+- Session monitoring: state and context fill level.
+- Approve/Deny from the deck.
+- Sessions running on Windows and inside WSL2.
+
+**Out of scope for v1, but the architecture must not preclude it:** remote machines over
+SSH, sending prompts into a session, changing the permission mode of a running session,
+macOS/Linux as the plugin host.
+
+---
+
+## 2. The central problem: where the data comes from
+
+Claude Code has no public API for an outside observer. There are four channels, and each
+feature is assembled from a different combination of them.
+
+| Channel | What it gives | Reliability |
 |---|---|---|
-| **Hooks** (`~/.claude/settings.json`) | События жизненного цикла в реальном времени + **возможность ответить** на запрос разрешения | Высокая. Документированный механизм расширения |
-| **Транскрипты** `~/.claude/projects/**/*.jsonl` | Полная история: токены, модель, cwd, ветка, тайминги | Высокая, формат стабилен, но не контракт |
-| **OAuth-токен** `~/.claude/.credentials.json` | Серверный usage — тот же, что показывает `/usage` | Низкая. Недокументировано, ломается при обновлениях |
-| **OTEL** (`CLAUDE_CODE_ENABLE_TELEMETRY=1`) | Метрики токенов/стоимости | Средняя. Даёт расход, но не остаток лимита |
+| **Hooks** (`~/.claude/settings.json`) | Lifecycle events in real time, plus **the ability to answer** a permission request | High. A documented extension mechanism |
+| **Transcripts** `~/.claude/projects/**/*.jsonl` | Full history: tokens, model, cwd, branch, timings | High. The format is stable, but it is not a contract |
+| **OAuth token** `~/.claude/.credentials.json` | Server-side usage — the same numbers `/usage` shows | Low. Undocumented, breaks on updates |
+| **OTEL** (`CLAUDE_CODE_ENABLE_TELEMETRY=1`) | Token and cost metrics | Medium. Reports spend, not remaining limit |
 
-**Принятое решение:** hooks — для состояний и approve/deny; транскрипты — для заполненности контекста; серверный источник за OAuth-токеном — для usage (см. §5, это критический путь фичи); OTEL не используем — он даёт расход, а нужен остаток лимита.
+**Decision:** hooks for session state and approve/deny; transcripts for context fill
+level; the server-side source behind the OAuth token for usage (see §5 — this is the
+critical path for that feature); OTEL is not used, because it reports spend when what is
+needed is the remaining limit.
 
 ---
 
-## 3. Архитектура
+## 3. Architecture
 
-Плагин на Windows не может читать `~/.claude` внутри WSL надёжно (9p работает на чтение, но inotify/FileSystemWatcher через него не работает, и главное — нет обратного канала для approve). Поэтому: **агент на каждой машине, где живёт Claude Code**.
+A plugin on Windows cannot reliably read `~/.claude` inside WSL. The 9p filesystem works
+for reads, but inotify and FileSystemWatcher do not work across it — and, more
+importantly, there is no return channel for approvals. Hence: **an agent on every machine
+where Claude Code runs.**
 
 ```
                        ┌─────────────────────────────────────┐
@@ -49,8 +62,8 @@ Claude Code не имеет публичного API для внешнего н�
                                       │ WebSocket (Elgato SDK)
                        ┌──────────────▼──────────────────────┐
                        │  ClaudeDeck.Plugin  (win-x64)       │
-                       │  ├─ Actions / рендер клавиш (Skia)  │
-                       │  └─ Hub: WS-сервер 127.0.0.1:17801  │
+                       │  ├─ Actions / key rendering (Skia)  │
+                       │  └─ Hub: WS server 127.0.0.1:17801  │
                        └──────▲───────────▲──────────▲───────┘
                               │           │          │
                    loopback   │   WSL2 ──┘          └── ssh -R (v2)
@@ -58,61 +71,75 @@ Claude Code не имеет публичного API для внешнего н�
                     ┌─────────┴──┐ ┌──────┴─────┐ ┌──────────┴────┐
                     │ Agent win  │ │ Agent WSL  │ │ Agent remote  │
                     └─────▲──────┘ └─────▲──────┘ └───────▲───────┘
-                          │ unix sock / named pipe        │
+                          │ unix socket / named pipe      │
                     ┌─────┴──────────────┴────────────────┴──────┐
-                    │  hook shim  (вызывается Claude Code)       │
+                    │  hook shim  (invoked by Claude Code)       │
                     └────────────────────────────────────────────┘
 ```
 
-**Направление соединения: агент → хаб.** Это снимает вопросы NAT и файрвола: WSL и удалённая машина сами дозваниваются до Windows. Хаб слушает только `127.0.0.1` (кроме NAT-режима WSL, см. §7).
+**Connections are made agent → hub.** This removes every NAT and firewall question: WSL
+and remote machines dial out to Windows themselves. The hub listens on `127.0.0.1` only,
+except in WSL NAT mode (see §7).
 
-**Хаб живёт внутри процесса плагина.** Проще для v1; агенты переподключаются при рестарте Stream Deck. Хаб пишется как отдельная библиотека, чтобы позже вынести в службу/трей без переписывания.
+**The hub lives inside the plugin process.** That is simpler for v1, and agents reconnect
+when Stream Deck restarts. It is written as a separate library so it can later move into
+a service or tray app without a rewrite.
 
-### 3.1 Роль агента
+### 3.1 What the agent does
 
-Один процесс на машину (не на сессию):
+One process per machine, not per session:
 
-1. Слушает локальный сокет для hook shim'ов — принимает события, отдаёт решения по approve.
-2. Держит реестр живых сессий и следит за их живостью.
-3. Инкрементально читает транскрипты (offset + poll 500 мс, без file watchers — надёжнее кроссплатформенно), считает контекст и токены.
-4. Держит WS-соединение с хабом, шлёт дельты, принимает решения и конфиг.
-5. Работает автономно если хаб недоступен — просто копит состояние.
+1. Listens on a local socket for hook shims — accepts events, returns approval decisions.
+2. Keeps a registry of live sessions and tracks their liveness.
+3. Reads transcripts incrementally (byte offset plus a 500 ms poll, no file watchers —
+   more reliable across platforms) and computes context size.
+4. Holds a WebSocket connection to the hub, pushes deltas, receives decisions and config.
+5. Keeps working when the hub is unreachable, simply accumulating state.
 
-### 3.2 Hook shim
+### 3.2 The hook shim
 
-Хуки вызываются на **каждый** tool call, поэтому время старта критично. Два варианта, оба поддерживаем:
+Hooks fire on **every** tool call, so startup time matters. Two options, both supported:
 
-- **Основной:** `claudedeck-hook` — NativeAOT-бинарник (~2 МБ, старт ~5 мс), пробрасывает stdin в локальный сокет агента и печатает ответ в stdout.
-- **Zero-install fallback:** `curl --unix-socket ... --data-binary @-` — контракт хуков (JSON в stdin, JSON в stdout) идеально ложится на curl.
+- **Primary:** `claudedeck-hook`, a NativeAOT binary (~2 MB, ~5 ms startup) that forwards
+  stdin to the agent's local socket and prints the response to stdout.
+- **Zero-install fallback:** `curl --unix-socket ... --data-binary @-`. The hook contract
+  — JSON on stdin, JSON on stdout — maps onto curl directly.
 
-Shim **никогда не блокирует дольше** установленного лимита и при любой ошибке молча выходит с кодом 0 — сессия не должна страдать от того, что пульт отвалился.
+The shim **never blocks longer** than its configured limit, and on any error exits
+quietly with code 0. A session must not suffer because the deck went away.
 
 ---
 
-## 4. Фича 1: Мониторинг сессий
+## 4. Feature 1: session monitoring
 
-### 4.1 Модель состояний
+### 4.1 State model
 
-Строится из хуков. Ниже — целевая машина состояний; точный набор полей payload'а проверяется в Фазе 0 на установленной версии.
+Derived from hooks. Below is the target state machine; the exact payload fields are
+verified against the installed version in Phase 0.
 
-| Событие хука | Переход |
+| Hook event | Transition |
 |---|---|
-| `SessionStart` | → `Idle`, регистрация сессии (id, cwd, model, transcript_path, git branch) |
+| `SessionStart` | → `Idle`, register the session (id, cwd, model, transcript_path, git branch) |
 | `UserPromptSubmit` | → `Working` |
-| `PreToolUse` | → `Working` (+ имя инструмента на клавише), либо → `WaitingApproval` если сработал гейт |
+| `PreToolUse` | → `Working` (with the tool name on the key), or → `WaitingApproval` if the gate fired |
 | `PostToolUse` | → `Working` |
-| `Notification` | → `NeedsAttention` (CC шлёт его при запросе разрешения и при простое >60 с) |
-| `Stop` | → `Idle` — **это и есть «ждёт ответа пользователя»**, ход закончен |
+| `Notification` | → `NeedsAttention` (Claude Code sends it on permission requests and after 60 s idle) |
+| `Stop` | → `Idle` — **this is exactly "waiting for the user"**, the turn is over |
 | `PreCompact` | → `Compacting` |
-| `SessionEnd` | → удаление из реестра |
+| `SessionEnd` | → remove from the registry |
 
-Итоговые состояния на клавише: **Idle / Working / WaitingInput / WaitingApproval / Compacting / Stale / Error**.
+The resulting key states: **Idle / Working / WaitingInput / WaitingApproval / Compacting /
+Stale / Error**.
 
-**Живость.** `SessionEnd` не приходит при убийстве терминала. Поэтому агент дополнительно: (а) на `SessionStart` запоминает PID процесса `claude` (обход цепочки родителей hook-процесса), (б) следит за mtime транскрипта. Нет процесса или нет событий N минут → `Stale`. Точность определения PID — риск средней величины, fallback по таймауту работает всегда.
+**Liveness.** `SessionEnd` does not arrive when a terminal is killed. So the agent also
+(a) records the PID of the `claude` process on `SessionStart` by walking the hook
+process's ancestors, and (b) watches the transcript's mtime. No process, or no events for
+N minutes, means `Stale`. PID detection is a medium risk; the timeout fallback always
+works.
 
-### 4.2 Заполненность контекста
+### 4.2 Context fill level
 
-Из хвоста транскрипта берём последнюю `assistant`-запись:
+Take the last `assistant` record from the tail of the transcript:
 
 ```
 context_tokens = usage.input_tokens
@@ -120,54 +147,77 @@ context_tokens = usage.input_tokens
                + usage.cache_read_input_tokens
 ```
 
-Проверено на реальных данных: `1 + 3928 + 79076 = 83 005`.
+Verified against real data: `1 + 3928 + 79076 = 83,005`.
 
-Знаменатель — окно модели. Нужна таблица `model → window`, обязательно с обработкой суффикса `[1m]` (у вас в настройках `opus[1m]` → 1M вместо 200k). Неизвестная модель → 200k + пометка «оценка».
+The denominator is the model's context window. A `model → window` table is required, and
+it must handle the `[1m]` suffix — a configured model of `opus[1m]` means 1M rather than
+200k. An unknown model falls back to 200k and is flagged as an estimate.
 
-На клавише показываем процент и кольцо-индикатор, с рисками на пороге авто-компакта. `PreCompact` даёт точный момент сжатия — по нему можно калибровать реальный порог.
-
----
-
-## 5. Фича 2: Usage (5ч / неделя)
-
-**Цель — паритет с командой `/usage` в клиенте, не больше.** Проценты по 5-часовому и недельному окнам и время сброса. Никаких разбивок по моделям, проектам и категориям.
-
-### 5.1 Следствие: usage привязан к аккаунту, а не к машине
-
-Лимиты считаются на аккаунт целиком. Значит:
-
-- Межмашинная агрегация **не нужна** — достаточно одного источника на аккаунт.
-- Агент, у которого есть валидные учётные данные, отвечает за весь аккаунт; остальные агенты usage не считают.
-- Ключ агрегации — идентификатор аккаунта. Если Windows и WSL залогинены в разные аккаунты, это два независимых бюджета и два набора клавиш.
-
-Это снимает из проекта целый пласт: дедупликацию записей между машинами, веса моделей, скользящие окна по транскриптам.
-
-### 5.2 Основной провайдер: серверные данные
-
-`/usage` показывает серверную правду. Из транскриптов она принципиально не воспроизводится — там нет ни знаменателя лимита, ни расхода с других устройств. Поэтому источник должен быть тот же, что у клиента.
-
-В `~/.claude/.credentials.json` есть `claudeAiOauth.accessToken`, `subscriptionType`, `rateLimitTier`. Задача Фазы 0 — определить, откуда `/usage` берёт цифры (перехват трафика CLI либо анализ бандла), и реализовать `IUsageProvider` поверх этого источника.
-
-**Это критический путь фичи, а не опциональное улучшение.** Если источник окажется недоступен, фича в заявленном виде не реализуема — см. §5.3.
-
-Ограничения, принимаемые заранее:
-- Источник недокументирован и может отвалиться при обновлении CC → провайдер за интерфейсом, деградация без падения плагина, явная индикация «данные недоступны» на клавише.
-- Токен читается только агентом на своей машине, не логируется, не передаётся в хаб и не покидает машину. В хаб уходят только готовые проценты и время сброса.
-- Частота опроса — низкая (раз в 1–5 минут, с бэкоффом при ошибках). Никакого поллинга на каждый кадр рендера.
-
-### 5.3 Запасной вариант при провале Фазы 0
-
-Если серверный источник недоступен, деградируем до оценки по транскриптам: абсолютный расход токенов в текущем 5-часовом блоке и за неделю, **без процентов** — знаменатель неизвестен, врать нельзя. Клавиша явно помечается как оценочная (`≈`).
-
-Решение об этом принимается по итогам Фазы 0, до начала Фазы 3.
+The key shows a percentage and a ring indicator, with a mark at the auto-compact
+threshold. `PreCompact` gives the exact moment compaction happens, which can be used to
+calibrate the real threshold.
 
 ---
 
-## 6. Фича 3: Approve / Deny с пульта
+## 5. Feature 2: usage (5-hour and weekly)
 
-### 6.1 Механизм
+**The goal is parity with the client's `/usage` command, nothing more:** percentages for
+the 5-hour and weekly windows, and their reset times. No breakdowns by model, project or
+category.
 
-`PreToolUse` — единственный хук, который может **решать**. Его stdout:
+### 5.1 Consequence: usage belongs to an account, not a machine
+
+Limits are counted per account. Therefore:
+
+- Cross-machine aggregation is **not needed** — one source per account is enough.
+- Whichever agent holds valid credentials answers for the whole account; other agents do
+  not compute usage.
+- The aggregation key is the account identifier. If Windows and WSL are logged into
+  different accounts, those are two independent budgets and two sets of keys.
+
+This removes a whole layer from the project: deduplicating records across machines, model
+weighting, and sliding windows computed from transcripts.
+
+### 5.2 Primary provider: server-side data
+
+`/usage` reports server-side truth. It cannot be reconstructed from transcripts in
+principle — they contain neither the limit's denominator nor spend from other devices. So
+the source has to be the same one the client uses.
+
+`~/.claude/.credentials.json` holds `claudeAiOauth.accessToken`, `subscriptionType` and
+`rateLimitTier`. The Phase 0 task is to determine where `/usage` gets its numbers — by
+intercepting CLI traffic or analysing the bundle — and to implement `IUsageProvider` on
+top of that source.
+
+**This is the feature's critical path, not an optional improvement.** If the source turns
+out to be unavailable, the feature as specified cannot be built — see §5.3.
+
+Constraints accepted up front:
+- The source is undocumented and may break when Claude Code updates. The provider sits
+  behind an interface, degrades without taking the plugin down, and the key clearly
+  indicates "no data".
+- The token is read only by the agent on its own machine. It is never logged, never sent
+  to the hub, and never leaves that machine. Only finished percentages and reset times
+  travel to the hub.
+- Polling is infrequent — once every 1 to 5 minutes, with backoff on errors. Never on the
+  render loop.
+
+### 5.3 Fallback if Phase 0 fails
+
+If the server-side source is unavailable, degrade to an estimate from transcripts:
+absolute token spend in the current 5-hour block and over the week, **without
+percentages** — the denominator is unknown, and guessing it would be dishonest. The key
+is explicitly marked as an estimate (`≈`).
+
+That call is made on the Phase 0 findings, before Phase 3 begins.
+
+---
+
+## 6. Feature 3: approve / deny from the deck
+
+### 6.1 Mechanism
+
+`PreToolUse` is the only hook that can **decide**. Its stdout:
 
 ```json
 {"hookSpecificOutput":{
@@ -176,196 +226,284 @@ context_tokens = usage.input_tokens
   "permissionDecisionReason":"approved on Stream Deck"}}
 ```
 
-- `allow` — инструмент выполняется, штатный промпт не показывается.
-- `deny` — блокируется, причина уходит обратно модели.
-- `ask` — обычный промпт в терминале.
+- `allow` — the tool runs, no prompt is shown.
+- `deny` — the call is blocked and the reason goes back to the model.
+- `ask` — the normal terminal prompt appears.
 
-Поток: `PreToolUse` → shim → агент → хаб → клавиша мигает → нажатие → решение обратно по цепочке → shim печатает JSON.
+The flow: `PreToolUse` → shim → agent → hub → the key flashes → press → the decision
+travels back → the shim prints JSON.
 
-### 6.2 Паритет с консолью: три варианта ответа
+### 6.2 Console parity: three answers
 
-На пульте должны быть ровно те же варианты, что показывает терминал: **Allow**, **Allow always**, **Deny**.
+The deck must offer exactly what the terminal offers: **Allow**, **Allow always**,
+**Deny**.
 
-**Allow** → `permissionDecision: "allow"`. Тривиально.
+**Allow** → `permissionDecision: "allow"`. Trivial.
 
-**Deny** → `permissionDecision: "deny"` + `permissionDecisionReason`. Нюанс: в консоли вариант «No» позволяет *дописать текстом*, что сделать иначе. С пульта текст не введёшь, поэтому уходит заготовленная причина («denied from Stream Deck»). Опционально — несколько клавиш с разными заготовками («не трогай это», «сначала покажи план», «используй другой подход»).
+**Deny** → `permissionDecision: "deny"` plus a `permissionDecisionReason`. One wrinkle: in
+the console, "No" lets you *type* what to do differently. You cannot type on a deck, so a
+canned reason is sent instead ("denied from Stream Deck"). Optionally, several keys with
+different canned reasons ("leave that alone", "show me a plan first", "take another
+approach").
 
-**Allow always** — в протоколе хуков такого решения нет, его реализуем мы сами. Два варианта хранения правила:
+**Allow always** has no equivalent in the hook protocol, so we implement it ourselves.
+Two ways to store the rule:
 
-| Вариант | Плюсы | Минусы |
+| Option | Pros | Cons |
 |---|---|---|
-| **A. Собственный стор агента** (рекомендуется) | Не трогаем конфиг пользователя, правило легко посмотреть и отозвать с пульта, откат тривиален | Правило не действует, если запустить CC без плагина |
-| B. Запись в `.claude/settings.local.json` | Ровно то, что делает сам CC; правило переживает удаление плагина | Нажатие кнопки молча правит конфиг в репозитории пользователя, откат руками |
+| **A. The agent's own store** (recommended) | Leaves the user's config alone; rules are easy to review and revoke from the deck; rollback is trivial | The rule does not apply when Claude Code runs without the plugin |
+| B. Writing to `.claude/settings.local.json` | Exactly what Claude Code itself does; the rule outlives the plugin | A key press silently edits config inside the user's repository, and undoing it is manual |
 
-**Принятое решение: вариант A по умолчанию**, с опциональным зеркалированием в `settings.local.json` (выключено по умолчанию). Причина: кнопку легко нажать случайно, а необратимая правка конфига от случайного нажатия — плохой дефолт.
+**Decision: option A by default**, with optional mirroring into `settings.local.json`,
+off by default. The reasoning: a physical key is easy to press by accident, and an
+irreversible config edit triggered by an accidental press is a bad default.
 
-Область действия правила выбирается так же, как в консоли, и зависит от инструмента: на сессию, на проект, либо на конкретный паттерн команды. Все накопленные правила видны и отзываются отдельным действием на пульте.
+Rule scope follows the console and depends on the tool: this session, this project, or a
+specific command pattern. Every accumulated rule is visible and revocable through a
+dedicated deck action.
 
-### 6.3 Предсказание «спросила бы консоль?»
+### 6.3 Predicting "would the console have asked?"
 
-`PreToolUse` срабатывает на **каждый** вызов инструмента, в том числе на давно разрешённые. Чтобы на пульт попадало ровно то, что попало бы в консоль, агент должен сам вычислить, потребовалось бы разрешение.
+`PreToolUse` fires on **every** tool call, including ones that were allowed long ago. For
+the deck to receive exactly what the console would have shown, the agent has to work out
+for itself whether permission would have been required.
 
-Для этого агент читает и вычисляет ту же конфигурацию, что и CC:
-- `permissions.allow` / `deny` / `ask` из цепочки настроек (enterprise → user → project → local);
+To do that it reads and evaluates the same configuration Claude Code does:
+- `permissions.allow` / `deny` / `ask` across the settings chain (enterprise → user →
+  project → local);
 - `defaultMode` (`default`, `acceptEdits`, `plan`, `bypassPermissions`);
-- текущий режим сессии, который пользователь мог переключить на лету (Фаза 0: проверить, приходит ли он в payload хука — если да, точность резко растёт);
-- собственные правила «Allow always» из §6.2.
+- the session's current mode, which the user may have switched on the fly (Phase 0: check
+  whether it arrives in the hook payload — if it does, accuracy improves sharply);
+- our own "Allow always" rules from §6.2.
 
-**Обе возможные ошибки предсказания безопасны, и это главный аргумент за такой подход:**
-- ложно решили, что спросят → лишний запрос на пульте, пользователь жмёт Allow. Стоимость — одно нажатие;
-- ложно решили, что не спросят → возвращаем `ask`, консоль показывает обычный промпт. Поведение ровно как без плагина.
+**Both possible prediction errors are safe, and that is the main argument for this
+approach:**
+- wrongly deciding it would ask → one extra request on the deck, the user presses Allow.
+  The cost is a single key press;
+- wrongly deciding it would not ask → we return `ask` and the console shows its normal
+  prompt. Behaviour is exactly as it would be without the plugin.
 
-Ни одна ошибка не приводит к автоматическому выполнению того, что пользователь не разрешал. Поэтому точность реплики правил можно наращивать итеративно, начав с простых случаев.
+Neither error can cause something the user did not permit to run automatically. So the
+fidelity of the rule replica can be improved iteratively, starting with the simple cases.
 
-**Глобальный переключатель** (энкодер): `Active` — запросы идут на пульт; `Observe` — только подсветка «сессия чего-то ждёт», решения в терминале; `Off` — хук сразу возвращает `ask`, плагин не вмешивается.
+**Global switch** (encoder): `Active` — requests go to the deck; `Observe` — only
+highlight that a session is waiting, decisions happen in the terminal; `Off` — the hook
+returns `ask` immediately and the plugin stays out of the way.
 
-### 6.4 Правила безопасности (не подлежат смягчению)
+### 6.4 Safety rules (not negotiable)
 
-1. **Fail to `ask`, никогда не fail to `allow`.** Таймаут, обрыв связи, упавший плагин — всё ведёт к обычному промпту в терминале. Плагин физически не может сделать сессию менее безопасной, чем она была без него.
-2. **Внутренний таймаут shim'а строго меньше** таймаута хука в настройках CC (например 20 с при лимите 30 с), чтобы решение всегда успевало напечататься.
-3. **Классификация опасности.** Эвристики по `tool_input`: `rm -rf`, `git push --force`, `curl | sh`, `sudo`, запись вне cwd, доступ к `.env`/секретам. Опасное → клавиша красная и требует **долгого нажатия** (800 мс). Физическую кнопку слишком легко хлопнуть локтем.
-4. **Полный текст команды виден до решения** — на тач-полосе энкодера, куда влезает больше, чем на клавишу.
+1. **Fail to `ask`, never fail to `allow`.** A timeout, a dropped connection, a crashed
+   plugin — all of them lead to the normal terminal prompt. The plugin physically cannot
+   make a session less safe than it was without it.
+2. **The shim's internal timeout is strictly shorter** than the hook timeout configured in
+   Claude Code (say 20 s against a 30 s limit), so a decision always has time to be
+   printed.
+3. **Danger classification.** Heuristics over `tool_input`: `rm -rf`, `git push --force`,
+   `curl | sh`, `sudo`, writes outside the cwd, access to `.env` or secrets. Anything
+   dangerous turns the key red and requires a **long press** (800 ms). A physical key is
+   far too easy to knock with an elbow.
+4. **The full command text is visible before deciding** — on the encoder's touch strip,
+   which fits more than a key does.
 
-### 6.5 Ограничения, о которых надо знать сразу
+### 6.5 Limitations worth knowing up front
 
-- Ответить на **уже показанный** в терминале промпт извне нельзя. Либо решаем на этапе `PreToolUse` (наш путь), либо никак. Эмуляция нажатий в терминал — не рассматриваем: хрупко и небезопасно.
-- В headless/SDK-режиме есть штатный `--permission-prompt-tool` — если позже появятся «управляемые» сессии, запускаемые с пульта, для них это более чистый путь.
+- A prompt **already displayed** in the terminal cannot be answered from outside. Either
+  we decide at `PreToolUse` — our route — or not at all. Emulating keystrokes into the
+  terminal is out of the question: fragile and unsafe.
+- Headless and SDK mode has a proper `--permission-prompt-tool`. If "managed" sessions
+  launched from the deck appear later, that is the cleaner path for them.
 
 ---
 
-## 7. Транспорт до WSL2 и удалённых машин
+## 7. Transport to WSL2 and remote machines
 
-Три транспорта за одним интерфейсом, выбор автоматический с fallback'ом.
+Three transports behind one interface, chosen automatically with fallback.
 
-**A. Loopback** (агент на Windows) — `ws://127.0.0.1:17801`. Тривиально.
+**A. Loopback** (agent on Windows) — `ws://127.0.0.1:17801`. Trivial.
 
-**B. WSL2 — сеть.**
-- *Mirrored networking* (`networkingMode=mirrored` в `.wslconfig`, Win11): WSL видит хост как `localhost`. Требует `hostAddressLoopback=true`. Самый чистый путь, и у вас Win11 — приоритетный вариант.
-- *NAT (по умолчанию)*: адрес хоста = default gateway из `ip route`. Хаб должен слушать на интерфейсе vEthernet (WSL) + правило файрвола. Больше возни у пользователя.
+**B. WSL2 over the network.**
+- *Mirrored networking* (`networkingMode=mirrored` in `.wslconfig`, Windows 11): WSL sees
+  the host as `localhost`. Requires `hostAddressLoopback=true`. The cleanest path and the
+  preferred option on Windows 11.
+- *NAT (the older default)*: the host address is the default gateway from `ip route`. The
+  hub has to listen on the vEthernet (WSL) interface and a firewall rule is needed. More
+  setup for the user.
 
-**C. WSL2 — файловый fallback.** WSL пишет в `/mnt/c/Users/<u>/AppData/Local/ClaudeDeck/ipc/`, Windows опрашивает каталог. Ноль сетевой настройки, латентность 50–100 мс — для approve приемлемо. Страховка на случай, если у пользователя нетривиальная сеть. Дёшево в реализации, сильно снижает риск «у меня не заработало».
+**C. WSL2 file-based fallback.** WSL writes into
+`/mnt/c/Users/<user>/AppData/Local/ClaudeDeck/ipc/` and Windows polls the directory. Zero
+network configuration, 50–100 ms latency, which is acceptable for approvals. Insurance
+for users with a non-trivial network setup. Cheap to build and it substantially reduces
+the "it just doesn't work for me" risk.
 
-**D. Удалённые машины (v2).** `ssh -R 17801:127.0.0.1:17801 user@host` — агент на удалённой машине подключается к своему localhost, туннель ведёт на хаб. Ничего не надо открывать наружу, аутентификация переиспользует SSH. Опционально плагин сам поднимает и перезапускает туннель.
+**D. Remote machines (v2).** `ssh -R 17801:127.0.0.1:17801 user@host` — the agent on the
+remote machine connects to its own localhost and the tunnel leads back to the hub.
+Nothing has to be exposed, and authentication reuses SSH. Optionally the plugin brings
+the tunnel up and restarts it itself.
 
-**Аутентификация:** токен на агента, генерируется на стороне Windows, передаётся в handshake. Без токена соединение отклоняется — обязательно, раз в NAT-режиме порт может быть виден за пределами loopback.
+**Authentication:** a per-agent token, generated on the Windows side and presented during
+the handshake. Connections without a token are rejected — mandatory, since in NAT mode
+the port can be visible beyond loopback.
 
 ---
 
-## 8. Раскладка на Stream Deck + XL
+## 8. Layout on the Stream Deck + XL
 
-Действия проектируются независимо от раскладки; ниже — рекомендуемый профиль.
+Actions are designed to be layout-independent; the profile below is a recommendation.
 
-**Энкодеры (6):**
+**Encoders (6):**
 
-| # | Действие | Вращение | Нажатие |
+| # | Action | Rotate | Press |
 |---|---|---|---|
-| 1 | Usage 5ч | — | обновить сейчас |
-| 2 | Usage неделя | — | обновить сейчас |
-| 3 | Браузер сессий | листание сессий, полоса показывает проект+состояние+контекст | сделать активной |
-| 4 | Очередь approve | листание ожидающих запросов, полный текст команды на полосе | — (решение только клавишами, чтобы не подтвердить случайно) |
-| 5 | Режим плагина | Off → Observe → Active | — |
-| 6 | Свободен (счётчик сессий / правила «Allow always») | | |
+| 1 | Usage, 5-hour | — | refresh now |
+| 2 | Usage, weekly | — | refresh now |
+| 3 | Session browser | scroll sessions; the strip shows project, state and context | make active |
+| 4 | Approval queue | scroll pending requests, full command text on the strip | — (decisions are keys only, so nothing is confirmed by accident) |
+| 5 | Plugin mode | Off → Observe → Active | — |
+| 6 | Spare (session count / "Allow always" rules) | | |
 
-**Клавиши:** ряд из 6–8 слотов сессий (цвет = состояние, кольцо = контекст, подпись = проект/ветка; распределение слотов — §13.6), блок approve (**Allow / Allow always / Deny** — паритет с консолью, плюс «в терминал»), клавиша мьюта алертов, клавиша usage-сводки.
+**Keys:** a row of 6–8 session slots (colour = state, ring = context, label = project and
+branch; slot assignment is described in §13.6), an approval block (**Allow / Allow always
+/ Deny** for console parity, plus "leave it to the terminal"), an alert mute key, and a
+usage summary key.
 
-Обе usage-клавиши показывают процент, полосу и время сброса окна — ровно то, что показывает `/usage`.
+Both usage keys show a percentage, a bar and the window's reset time — exactly what
+`/usage` shows.
 
-**Рендеринг:** SkiaSharp, 144×144 PNG. Обновления коалесцируются, не чаще ~4 Гц, с dirty-флагом на клавишу — иначе WS Stream Deck'а захлёбывается.
+**Rendering:** SkiaSharp, 144×144 PNG. Updates are coalesced to no more than ~4 Hz with a
+dirty flag per key, otherwise the Stream Deck WebSocket chokes.
 
 ---
 
-## 9. Структура репозитория
+## 9. Repository layout
 
 ```
 /src
-  ClaudeDeck.Protocol/    # DTO, версионирование протокола, общая для всех
-  ClaudeDeck.Core/        # парсер транскриптов, usage-математика, машина состояний
-  ClaudeDeck.Agent/       # демон: сокет для хуков, реестр сессий, WS-клиент
-  ClaudeDeck.HookShim/    # NativeAOT, минимальный
-  ClaudeDeck.Hub/         # WS-сервер + агрегация по агентам (библиотека)
-  ClaudeDeck.Plugin/      # Stream Deck плагин, действия, рендер
+  ClaudeDeck.Protocol/    # DTOs, protocol versioning, shared by everything
+  ClaudeDeck.Core/        # transcript parsing, context maths, state machine
+  ClaudeDeck.Agent/       # daemon: hook socket, session registry, WS client
+  ClaudeDeck.HookShim/    # NativeAOT, minimal
+  ClaudeDeck.Hub/         # WS server and per-agent aggregation (library)
+  ClaudeDeck.Plugin/      # Stream Deck plugin, actions, rendering
 /tests
-  ClaudeDeck.Core.Tests/  # golden-тесты на реальных обезличенных .jsonl
+  ClaudeDeck.Core.Tests/  # golden tests over sanitized real .jsonl files
 /tools
-  install/                # скрипты установки агента и патча settings.json
+  install/                # agent installation and settings.json patching
 /docs
   design.md  protocol.md  findings.md
 com.gyaltchik.claudedeck.sdPlugin/
 ```
 
-**Стек:** .NET 10, SkiaSharp (рендер), System.Net.WebSockets, xUnit.
-**Библиотека Stream Deck:** старт на BarRaider StreamDeck-Tools, но **весь контакт с SDK изолирован за `IDeckConnection`** — устройство новое, если в библиотеке не окажется поддержки 6 энкодеров, переход на сырой WebSocket-протокол Elgato стоит примерно день.
+**Stack:** .NET 10, SkiaSharp for rendering, System.Net.WebSockets, xUnit.
+
+**Stream Deck library:** start with BarRaider's StreamDeck-Tools, but **all contact with
+the SDK is isolated behind `IDeckConnection`**. The device is new; if the library turns
+out not to support 6 encoders, moving to Elgato's raw WebSocket protocol costs about a
+day.
 
 ---
 
-## 10. Риски
+## 10. Risks
 
-| Риск | Вер. | Влияние | Митигация |
+| Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| Формат payload хуков поменяется в новой версии CC | Средняя | Высокое | Контрактные тесты, версия CC в handshake, деградация до read-only мониторинга |
-| Блокирующий хук подвесит сессию | Низкая | **Критическое** | Жёсткий таймаут < лимита хука, fail to `ask`, kill-switch |
-| Случайный approve опасной команды | Средняя | **Критическое** | Классификация опасности, long-press, полный текст команды до решения |
-| **Серверный источник usage недоступен** | Средняя | **Высокое** | Решается в Фазе 0 до начала разработки фичи; запасной вариант — оценка без процентов (§5.3) |
-| Источник usage отвалится при обновлении CC | Высокая | Среднее | Провайдер за интерфейсом, клавиша честно показывает «нет данных», плагин не падает |
-| Реплика правил `permissions` неточна | Высокая | **Низкое** | Обе ошибки безопасны по построению (§6.3): либо лишнее нажатие, либо обычный промпт в терминале |
-| WSL-сеть не заводится у пользователя | Средняя | Высокое | Три транспорта, включая файловый |
-| Библиотека SD не знает Stream Deck + XL | Средняя | Среднее | Абстракция `IDeckConnection`, проверка в Фазе 0 |
-| Определение PID сессии ненадёжно | Средняя | Низкое | Fallback на таймаут неактивности |
+| Hook payload format changes in a new Claude Code version | Medium | High | Contract tests, Claude Code version in the handshake, degrade to read-only monitoring |
+| A blocking hook wedges a session | Low | **Critical** | Hard timeout below the hook limit, fail to `ask`, kill switch |
+| Accidental approval of a dangerous command | Medium | **Critical** | Danger classification, long press, full command text before deciding |
+| **Server-side usage source is unavailable** | Medium | **High** | Settled in Phase 0 before the feature is built; fallback is an estimate without percentages (§5.3) |
+| Usage source breaks on a Claude Code update | High | Medium | Provider behind an interface, the key honestly shows "no data", the plugin does not crash |
+| The `permissions` rule replica is inaccurate | High | **Low** | Both errors are safe by construction (§6.3): either one extra press, or the normal terminal prompt |
+| WSL networking does not come up for the user | Medium | High | Three transports, including the file-based one |
+| The Stream Deck library does not know the Stream Deck + XL | Medium | Medium | The `IDeckConnection` abstraction, verified in Phase 0 |
+| Session PID detection is unreliable | Medium | Low | Fall back to an inactivity timeout |
 
 ---
 
-## 11. План работ по фазам
+## 11. Work plan by phase
 
-**Фаза 0 — Разведка (1–2 дня, код одноразовый).**
-Пять проверок, каждая закрывает риск из §10:
-1. Снять реальные payload'ы всех хуков на CC 2.1.232; убедиться, что `PreToolUse` действительно решает; проверить, приходит ли в payload текущий режим permissions.
-2. **Найти источник данных `/usage`** — это gate-решение для Фазы 3, при провале фича переходит в вид §5.3.
-3. Проверить манифест, 6 энкодеров и тач-полосу на живом Stream Deck + XL.
-4. Проверить WSL-транспорт (mirrored networking у вас должен завестись первым вариантом).
-5. Прикинуть объём реплики правил `permissions` на реальных конфигах.
+**Phase 0 — reconnaissance (1–2 days, throwaway code).**
+Five checks, each closing a risk from §10:
+1. Capture real payloads for every hook on the installed version; confirm `PreToolUse`
+   genuinely decides; check whether the current permission mode arrives in the payload.
+2. **Find the data source behind `/usage`** — a gate decision for Phase 3; if it fails,
+   the feature becomes §5.3.
+3. Verify the manifest, all 6 encoders and the touch strip on a live Stream Deck + XL.
+4. Verify the WSL transport (mirrored networking should be the first thing that works on
+   Windows 11).
+5. Size up the `permissions` rule replica against real configs.
 
-Результат — `docs/findings.md` и подтверждённые либо опровергнутые допущения этого документа.
+The output is `docs/findings.md` and this document's assumptions either confirmed or
+refuted.
 
-**Фаза 1 — Скелет.** Репозиторий, solution, `Protocol`, минимальные хаб+агент+плагин. Критерий: клавиша показывает «агентов подключено: N», WSL-агент виден.
+**Phase 1 — skeleton.** Repository, solution, `Protocol`, a minimal hub, agent and
+plugin. Success criterion: a key shows "agents connected: N" and the WSL agent is
+visible.
 
-**Фаза 2 — Мониторинг сессий (read-only).** Хуки → состояния, транскрипты → контекст, клавиши-слоты сессий, алерты. **Уже самостоятельно полезно** и полностью безопасно.
+**Phase 2 — session monitoring (read-only).** Hooks → state, transcripts → context,
+session slot keys, alerts. **Already useful on its own** and completely safe.
 
-**Фаза 3 — Usage.** `IUsageProvider` поверх найденного в Фазе 0 источника, клавиши и энкодеры 5ч/неделя с процентом и временем сброса, аккуратный опрос с бэкоффом, честное «нет данных» при недоступности.
+**Phase 3 — usage.** `IUsageProvider` over the source found in Phase 0, keys and encoders
+for the 5-hour and weekly windows with percentage and reset time, careful polling with
+backoff, an honest "no data" when unavailable.
 
-**Фаза 4 — Approve/Deny.** Реплика правил `permissions` (§6.3), три варианта ответа с паритетом консоли (§6.2), стор правил «Allow always», классификация опасности, long-press, все правила безопасности §6.4.
+**Phase 4 — approve/deny.** The `permissions` rule replica (§6.3), three answers with
+console parity (§6.2), the "Allow always" rule store, danger classification, long press,
+and every safety rule in §6.4.
 
-**Фаза 5 — WSL и удалёнка.** Три транспорта, `claudedeck agent install` с автопатчем `settings.json`, SSH-туннель.
+**Phase 5 — WSL and remote.** The three transports, `claudedeck agent install` with
+automatic `settings.json` patching, the SSH tunnel.
 
-**Фаза 6 — Упаковка.** Property Inspector, готовый профиль для SD+XL, сборка `.streamDeckPlugin`, CI, README.
+**Phase 6 — packaging.** Property Inspector, a ready-made Stream Deck + XL profile, a
+`.streamDeckPlugin` build, CI, README.
 
-Фазы 2–4 независимы после Фазы 1 — порядок можно менять. Рекомендуемый порядок именно такой: сначала то, что не может ничего сломать.
+Phases 2 through 4 are independent once Phase 1 is done, so their order can change. The
+recommended order is the one above: what cannot break anything comes first.
 
 ---
 
-## 12. Предложения по фичам (сверх изначального списка)
+## 12. Feature suggestions beyond the original list
 
-Приоритет по соотношению польза/стоимость:
+Ordered by value against cost:
 
-1. **Фокус окна сессии** — нажатие на слот выводит терминал нужной сессии на передний план. Для Windows-сессий реализуемо через PID; для WSL сложнее (сопоставление по заголовку окна). Средний риск, высокая польза: при 5+ сессиях найти нужное окно — сама по себе задача.
-2. **Классификация опасности команд** — формально часть безопасности approve (§6.4), но полезна и сама по себе как визуальный сигнал.
-3. **Управление правилами «Allow always»** — отдельное действие: список накопленных правил, отзыв одним нажатием. Без него «Allow always» превращается в необратимое решение.
-4. **Заготовленные причины отказа** — несколько клавиш Deny с разным текстом вместо одной универсальной. Дёшево, заметно повышает полезность отказа для модели.
-5. **Глобальный мьют алертов** — одна клавиша, спасает на созвонах.
-6. **Отправка заготовленных промптов** («continue», «run tests», «commit») — требует либо управляемых сессий, либо хака через `Stop`-хук. Отложить до v2, но учесть в протоколе.
+1. **Focus a session's window** — pressing a slot brings that session's terminal to the
+   front. Achievable through the PID for Windows sessions; harder for WSL, where it means
+   matching on window title. Medium risk, high value: with five or more sessions, finding
+   the right window is a task in itself.
+2. **Danger classification for commands** — formally part of approval safety (§6.4), but
+   valuable on its own as a visual signal.
+3. **Managing "Allow always" rules** — a dedicated action listing accumulated rules with
+   one-press revocation. Without it, "Allow always" becomes an irreversible decision.
+4. **Canned denial reasons** — several Deny keys with different text instead of one
+   generic reason. Cheap, and it makes a denial considerably more useful to the model.
+5. **Global alert mute** — one key, invaluable during calls.
+6. **Sending canned prompts** ("continue", "run tests", "commit") — needs either managed
+   sessions or a hack through the `Stop` hook. Defer to v2, but account for it in the
+   protocol.
 
-**Чего сознательно не делаем:** эмуляции клавиатурного ввода в терминал; изменения `permissions` работающей сессии извне; любого автоматического `allow` при недоступности пульта; разбивок usage по моделям/проектам/стоимости — цель ровно паритет с `/usage`.
+**Deliberately not doing:** emulating keyboard input into the terminal; changing a running
+session's `permissions` from outside; any automatic `allow` when the deck is unreachable;
+usage breakdowns by model, project or cost — the goal is parity with `/usage`, exactly.
 
 ---
 
-## 13. Решения и открытые вопросы
+## 13. Decisions and open questions
 
-**Принято:**
-1. Approve на пульте повторяет консоль: **Allow / Allow always / Deny**. Никаких собственных режимов авто-разрешения.
-2. «Allow always» хранится в сторе агента, конфиг пользователя по умолчанию не правится (§6.2).
-3. Usage — паритет с `/usage`, без разбивок. Источник — серверный, привязан к аккаунту, а не к машине.
-4. Удалённые машины — задел в протоколе и транспорте, реализация после v1.
-5. Репозиторий публичный с первого коммита. Следствия: лицензия и README сразу, CI на ранней стадии, и обязательное обезличивание всего, что попадает в репозиторий из реальных сессий — payload'ов хуков, конфигов, тестовых фикстур. Токены и сырые дампы трафика не коммитятся никогда.
-6. Слоты сессий динамические, без привязки к проекту, но **закреплённые**: сессия занимает наименьший свободный слот при первом появлении и держит его до завершения. Переупорядочивание по активности не делаем — прыгающие под пальцами клавиши раздражают в Фазе 2 и опасны в Фазе 4, где та же клавиша разрешает команды.
+**Decided:**
+1. Approval on the deck mirrors the console: **Allow / Allow always / Deny**. No bespoke
+   auto-approval modes.
+2. "Allow always" is stored in the agent's own store; the user's config is not edited by
+   default (§6.2).
+3. Usage means parity with `/usage`, with no breakdowns. The source is server-side and
+   belongs to an account, not a machine.
+4. Remote machines: groundwork in the protocol and transport, implementation after v1.
+5. The repository is public from the first commit. Consequences: a license and README
+   immediately, CI early, and mandatory sanitization of everything that enters the
+   repository from real sessions — hook payloads, configs, test fixtures. Tokens and raw
+   traffic dumps are never committed.
+6. Session slots are dynamic and not tied to a project, but **sticky**: a session takes
+   the lowest free slot when it first appears and keeps it until it ends. Slots are never
+   reordered by activity — keys that move under your fingers are irritating in Phase 2 and
+   dangerous in Phase 4, where the same key approves commands.
 
-**Открыто:**
-1. Что делать, если Фаза 0 не найдёт источник usage: принять оценочный режим §5.3 или отложить фичу целиком?
+**Open:**
+1. What to do if Phase 0 cannot find the usage source: accept the estimate mode in §5.3,
+   or defer the feature entirely?

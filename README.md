@@ -40,8 +40,6 @@ to be layout-independent and should work on other Stream Deck models.
 - [Design document](docs/design.md) — architecture, data sources, safety rules, risks.
 - [Work plan](PLAN.md) — the atomic, commit-by-commit implementation plan.
 
-Both are written in Russian.
-
 ## License
 
 [MIT](LICENSE)
