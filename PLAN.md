@@ -1,310 +1,223 @@
-# Plan: ClaudeDeck — reconnaissance, skeleton and session monitoring
+# Plan: ClaudeDeck implementation
 
-<!-- 19 steps: 1-8 reconnaissance, 9-13 end-to-end skeleton, 14-19 session monitoring. -->
+<!-- 15 steps: 1-5 usage on the deck, 6-9 the agent and hub, 10-15 session monitoring. -->
 
 ## Goal
 
-Take the project from an empty directory to a working read-only monitor of Claude Code
-sessions on a Stream Deck + XL: keys show each session's state and how full its context
-window is, including sessions running inside WSL2. Along the way, settle every assumption
-the later phases (usage and approve/deny) depend on.
+Take the project from a validated set of assumptions to a Stream Deck that shows real usage
+limits and the live state of every Claude Code session, including sessions inside WSL2.
+
+## Reconnaissance is complete
+
+Phase 0 ran as seven steps and produced [docs/findings/](docs/findings/). Everything below
+rests on measurements rather than assumptions:
+
+- [hooks.md](docs/findings/hooks.md) — real payloads for every event, and what they do not carry
+- [pretooluse.md](docs/findings/pretooluse.md) — hook decisions confirmed in both directions
+- [usage-source.md](docs/findings/usage-source.md) — the endpoint, confirmed live
+- [rendering.md](docs/findings/rendering.md) — keys are SVG, no imaging library
+- [streamdeck.md](docs/findings/streamdeck.md) — the device, the protocol, no SDK wrapper
+- [wsl-transport.md](docs/findings/wsl-transport.md) — NAT works, no firewall rule
+- [permissions.md](docs/findings/permissions.md) — the rule surface is small
+
+[docs/design.md](docs/design.md) version 0.2 folds all of it in.
 
 ## Assumptions / context
 
-- Design: [docs/design.md](docs/design.md). This plan implements Phases 0 through 2 of it.
-- Claude Code 2.1.232, installed both on Windows (`~/.claude`) and as a separate copy
-  inside WSL Ubuntu-24.04. A second distribution, Ubuntu-20.04, is also running.
-- .NET SDK 10.0.302, tests with xUnit. Keys are drawn as SVG data URLs, with no imaging
-  library — see [docs/findings/rendering.md](docs/findings/rendering.md).
-- The repository is public from the first commit, which is where the sanitization
-  requirements on reconnaissance artifacts and the early CI step come from.
-- Commit messages: imperative subject with a subsystem prefix (`agent: ...`,
-  `plugin: ...`), body in plain language, bullets over prose, essentials only.
-- Reconnaissance hooks are registered in the **project's own** `.claude/settings.json`
-  inside this repository, not in the global config, so experiments cannot disturb real
-  sessions in other directories.
-- A deliberate deviation from the design for Phases 0 through 2: the local hook → agent
-  channel uses loopback HTTP rather than a unix socket or named pipe. `curl` exists on
-  both Windows and WSL, and the hook contract (JSON on stdin, JSON on stdout) maps onto
-  it directly. The NativeAOT shim from design §3.2 arrives in Phase 5, once there is a
-  measurable load to justify it.
+- .NET 10, xUnit. No imaging library, no Stream Deck SDK wrapper — the plugin speaks the
+  Elgato WebSocket protocol directly, as validated by the Phase 0 probe now living in
+  `src/ClaudeDeck.Plugin`.
+- Commit messages: imperative subject with a subsystem prefix, plain language, bullets,
+  essentials only.
+- **Usage needs no agent.** The plugin can read `.credentials.json` directly, including
+  through `\\wsl.localhost\<distro>\home\<user>\.claude\` when the token only exists inside
+  WSL. Reads over 9p are reliable; it is change notification and return channels that are not,
+  and usage needs neither. The agent and hub arrive later, for sessions and approvals.
+- Anything requiring a permission decision must be tested **interactively** and in a **fresh
+  session**; both were learned the hard way in Phase 0.
 
 ## Risks
 
-- **Hook payloads may not match the assumptions in design §4.1.** → Resolved by Step 2.
-- **`PreToolUse` may not give real control over permissions.** All of Phase 4 rests on
-  this. → Resolved by Step 3.
-- **The chosen Stream Deck library may not know about the new device's 6 encoders.** →
-  Resolved by Step 4. If it fails, we move to Elgato's raw WebSocket protocol, roughly a
-  day of work.
-- **The WSL → Windows transport may not come up in the user's configuration.** → Resolved
-  by Step 5.
-- ~~**The server-side `/usage` data source may be unavailable.**~~ → **Resolved by Step 6.**
-  The endpoint is known and was confirmed with a live 200 response. Phase 3 keeps its full
-  shape and the §5.3 fallback is dropped. What remains is a smaller, permanent risk: the
-  endpoint is unofficial and can change with any Claude Code release, so the provider stays
-  behind an interface and the key degrades to "no data" rather than failing.
-- **The `permissions` rule replica may be larger than it looks.** → Sized by Step 7. The
-  risk is bounded by construction: both possible prediction errors are safe (design §6.3).
-- **Detecting the session's PID by walking process ancestors may not work.** → Surfaces in
-  Step 18; the inactivity-timeout fallback is built in the same step, so the step
-  completes either way.
-- **A public repository turns reconnaissance artifacts into a leak risk.** Steps 2, 6, 7
-  and 14 handle real paths, configs, transcripts and an OAuth token. → Sanitization is
-  part of the acceptance criteria for those steps, and `.gitignore` covers secrets from
-  Step 1.
+- **The usage endpoint is unofficial and can change with any release.** → Kept behind
+  `IUsageProvider` from Step 2, with the key degrading to "no data" rather than the plugin
+  failing. Accepted permanently; it is the price of the feature existing at all.
+- **Hook payloads can change.** → Contract tests in Step 7 run against the captured samples in
+  `docs/findings/hooks/`, so a format change fails a test instead of silently breaking a key.
+- **Session PID detection may be unreliable.** → Surfaces in Step 14, where the inactivity
+  fallback is built alongside it, so the step closes either way.
+- **Update floods.** Measured: one dial spin produced 116 events. → Coalescing is built into
+  the connection layer in Step 1, not retrofitted.
 
 ---
 
 ## Steps
 
-### Step 1: Initialize the public repository — done
+### Step 1: Turn the probe into a plugin skeleton
 
-- **Change:** `git init`, a .NET `.gitignore` with a dedicated secrets block
-  (`.credentials.json`, `*.token`, raw transcripts), LICENSE, a README, and the first
-  commit carrying the design document. The repository is public from the first commit, so
-  hygiene is set up now rather than retrofitted in Phase 6.
-- **Files:** `.gitignore`, `LICENSE`, `README.md`, `docs/design.md`
-- **Verify:** `git log --oneline` shows one commit; `git status` is clean; `.gitignore`
-  covers `**/.credentials.json` and `**/*.jsonl` outside `tests/fixtures/`
-- **Commit:** `repo: initialize public repository`
+- **Change:** Promote the Phase 0 probe into a real structure: a solution, the connection layer
+  behind `IDeckConnection`, an SVG composition module, and update coalescing with a per-key
+  dirty flag. One placeholder action, so the plugin stays loadable throughout.
+- **Files:** `ClaudeDeck.sln`, `src/ClaudeDeck.Plugin/*`, `src/ClaudeDeck.Core/*`,
+  `com.gyaltchik.claudedeck.sdPlugin/manifest.json`
+- **Verify:** plugin loads in Stream Deck and the placeholder key renders; a burst of events
+  produces at most ~4 updates per second per key
+- **Commit:** `plugin: promote the probe into a plugin skeleton`
 
-### Step 2: Capture real hook payloads
+### Step 2: Fetch usage behind a provider
 
-- **Change:** The project's `.claude/settings.json` registers every hook against a
-  recorder script that appends the received JSON to `docs/findings/hooks/<event>.jsonl`
-  and exits 0 without deciding anything. Run a session in this directory that touches
-  every event. The result is recorded fact instead of assumption. Only **sanitized**
-  samples are committed: paths, user names and command text replaced with placeholders.
-- **Files:** `.claude/settings.json`, `tools/spike/capture-hook.ps1`,
-  `tools/spike/sanitize.ps1`, `docs/findings/hooks/*.jsonl`
-- **Verify:** records exist for `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
-  `PostToolUse`, `Notification`, `Stop` and `SessionEnd`, containing `session_id`,
-  `transcript_path`, `cwd`, `tool_name` and `tool_input`. Separately, check whether the
-  current permission mode arrives — design §6.3's accuracy depends on it. `Notification`
-  has to be provoked deliberately, with a permission request and a minute of idling.
-  Before committing: `git grep` for the user name and for real working paths under
-  `docs/findings/` returns nothing.
-- **Commit:** `spike: capture real hook payloads`
+- **Change:** `IUsageProvider` with the real implementation: read credentials, refresh the token
+  when expired, call the endpoint, retry once on 401, normalize `limits[]` into a snapshot with
+  percentage, reset time and severity. Unit tests cover the response shapes, including missing
+  fields and the codenamed windows that must be ignored.
+- **Files:** `src/ClaudeDeck.Core/Usage/*`, `tests/ClaudeDeck.Core.Tests/*`
+- **Verify:** `dotnet test`; a temporary console call returns the same numbers `/usage` shows
+- **Commit:** `core: fetch and normalize usage behind a provider`
 
-### Step 3: Confirm that `PreToolUse` actually decides
+### Step 3: Set up CI for build and tests
 
-- **Change:** A stub hook returns `deny` for one harmless command, then `allow`, then
-  `ask`. The observed behaviour goes into findings. This either confirms or demolishes the
-  foundation of Phase 4.
-- **Files:** `tools/spike/decide-hook.ps1`, `docs/findings/pretooluse.md`
-- **Verify:** on `deny` the command does not run and the reason reaches the model; on
-  `allow` no prompt is shown; on `ask` the prompt appears as usual.
-  Two constraints learned the hard way: the test must run **interactively**, because
-  headless permission semantics differ (Step 2), and it needs a **fresh session**, because
-  a hook added to an existing group is not picked up by a running one.
-- **Commit:** `spike: confirm PreToolUse permission decisions take effect`
-
-### Step 4: Bring up a minimal plugin on the real device
-
-- **Change:** A plugin manifest and one action: a key with static text plus an encoder
-  with text on the touch strip. The point is to check that the chosen library understands
-  the Stream Deck + XL and all 6 encoders.
-- **Files:** `com.gyaltchik.claudedeck.sdPlugin/manifest.json`, `src/ClaudeDeck.Plugin/*`,
-  `docs/findings/streamdeck.md`
-- **Verify:** the plugin appears in Stream Deck and both the key and the encoder render on
-  the device; findings record whether all 6 encoders are addressable and whether the touch
-  strip works
-- **Commit:** `plugin: add minimal action to validate Stream Deck + XL support`
-
-### Step 5: Verify the WSL → Windows transport
-
-- **Change:** A script starts a listener on Windows and both distributions check whether
-  they can reach it. Record the working mode (mirrored or NAT), the host address and any
-  firewall settings required.
-- **Files:** `tools/spike/check-wsl-transport.ps1`, `docs/findings/wsl-transport.md`
-- **Verify:** a request from Ubuntu-24.04 and from Ubuntu-20.04 reaches the listener on
-  Windows; findings record how that was achieved
-- **Commit:** `spike: verify WSL2 to Windows host transport`
-
-### Step 6: Investigate the data source behind `/usage` — done
-
-- **Change:** Determine where the client gets its `/usage` numbers. Resolved without
-  traffic interception: an existing plugin,
-  [Sing3Rous/stream-deck-ai-limits](https://github.com/Sing3Rous/stream-deck-ai-limits),
-  already documents the endpoint, and a live request confirmed it against this account.
-- **Files:** `docs/findings/usage-source.md`, `docs/findings/rendering.md`
-- **Verify:** a reproducible request returns the same percentages and reset times `/usage`
-  shows. Confirmed: HTTP 200 with both windows populated. Nothing token-related reaches the
-  repository — only the request and response shape.
-- **Commit:** `spike: resolve the usage data source`
-
-### Step 7: Inventory the forms of `permissions` rules
-
-- **Change:** Collect the real configs (enterprise → user → project → local) from Windows
-  and both distributions, write down the **forms** of rules that occur, and size up the
-  matcher replica for design §6.3. Generalized forms go into the repository, not the
-  configs themselves.
-- **Files:** `docs/findings/permissions.md`
-- **Verify:** findings list the rule forms with sanitized examples and an estimate of the
-  matcher's cost; no real paths or internal project names remain
-- **Commit:** `spike: inventory permission rule forms`
-
-### Step 8: Fold the findings back into the design
-
-- **Change:** Update `docs/design.md` from steps 2 through 7: turn confirmed assumptions
-  into statements, rewrite the refuted ones, and settle the Phase 3 decision. Later phases
-  must build on what was verified.
-- **Files:** `docs/design.md`
-- **Verify:** no "to be verified in Phase 0" wording remains; §5 reflects the decision
-  taken on the usage source
-- **Commit:** `docs: fold reconnaissance findings into design`
-
-### Step 9: Make the agent accept and record hook events
-
-- **Change:** A `ClaudeDeck.Agent` project: a listener on `127.0.0.1`, `POST
-  /hook/{event}`, events written to an NDJSON log, and an always-empty response that
-  decides nothing. The project's `.claude/settings.json` switches from the spike scripts to
-  `curl` against the agent. This is already a useful event recorder on its own.
-- **Files:** `src/ClaudeDeck.Agent/*`, `.claude/settings.json`, `ClaudeDeck.sln`
-- **Verify:** with the agent running, a session in this directory fills the log; **with the
-  agent stopped, the session runs without delays or errors** — this checks the key property
-  that the plugin never gets in the way
-- **Commit:** `agent: record hook events over loopback HTTP`
-
-### Step 10: Derive session state from events
-
-- **Change:** The state machine from design §4.1, an in-memory session registry, and
-  `GET /sessions` returning id, cwd, branch, model and state. Transitions covered by xUnit
-  tests.
-- **Files:** `src/ClaudeDeck.Agent/*`, `tests/ClaudeDeck.Agent.Tests/*`
-- **Verify:** `dotnet test`; while a session works `GET /sessions` reports `Working`, and
-  `Idle` once the model answers
-- **Commit:** `agent: derive session state from hook events`
-
-### Step 11: Set up CI for build and tests
-
-- **Change:** GitHub Actions building the solution and running tests on every push and
-  pull request, with a badge in the README. A public repository without a green build
-  looks abandoned, and fixing accumulated CI in Phase 6 costs more than setting it up now,
-  with the first tests in place.
+- **Change:** GitHub Actions building and testing on push and pull request, badge in the README.
+  Placed here because Step 2 produced the first tests, and a public repository without a green
+  build looks abandoned.
 - **Files:** `.github/workflows/build.yml`, `README.md`
-- **Verify:** the workflow passes on GitHub after a push; a deliberately broken test fails
-  the build
+- **Verify:** the workflow passes on GitHub; a deliberately broken test fails it
 - **Commit:** `ci: build and test on push and pull request`
 
-### Step 12: Connect the agent to the hub
+### Step 4: Show the 5-hour window on a key
 
-- **Change:** `ClaudeDeck.Protocol` (a versioned message envelope), a WebSocket server in
-  the plugin process, and a WS client in the agent: token handshake, heartbeat, reconnect
-  with backoff.
+- **Change:** A usage action: percentage, bar and reset time composed as SVG, colour driven by
+  the server's `severity`. TTL cache with backoff, honouring `retry-after`. An explicit "no data"
+  face when the endpoint or credentials are unavailable. Credentials path configurable in the
+  Property Inspector, defaulting to the local file and accepting a WSL path.
+- **Files:** `src/ClaudeDeck.Plugin/Actions/*`, `src/ClaudeDeck.Core/Usage/*`,
+  `com.gyaltchik.claudedeck.sdPlugin/*`
+- **Verify:** on the device, the key shows the same percentage as `/usage`; with credentials
+  pointed at a nonexistent file it shows "no data" and the plugin keeps running
+- **Commit:** `plugin: show the five-hour usage window on a key`
+
+**This is the first genuinely useful build.**
+
+### Step 5: Add the weekly window and the encoders
+
+- **Change:** The weekly window as a second action, plus encoder variants using `setFeedback` on
+  the `$B1` layout, with press to refresh now.
+- **Files:** `src/ClaudeDeck.Plugin/Actions/*`, `com.gyaltchik.claudedeck.sdPlugin/manifest.json`
+- **Verify:** on the device, both windows show on keys and on two encoders; pressing refreshes
+- **Commit:** `plugin: add the weekly window and encoder variants`
+
+### Step 6: Record hook events in the agent
+
+- **Change:** `ClaudeDeck.Agent` listening on `127.0.0.1`, `POST /hook/{event}`, events to an
+  NDJSON log, always an empty response. Hooks registered through `curl`. Useful on its own as an
+  event recorder.
+- **Files:** `src/ClaudeDeck.Agent/*`, `.claude/settings.json`
+- **Verify:** a fresh session fills the log; **with the agent stopped the session runs without
+  delay or error**, which is the property that must never regress
+- **Commit:** `agent: record hook events over loopback HTTP`
+
+### Step 7: Derive session state from events
+
+- **Change:** The state machine from design §4.1, an in-memory registry, `GET /sessions`.
+  Includes the three behaviours Phase 0 found: `SessionStart source=compact` continues a session
+  rather than starting one, `SubagentStop` attaches to its parent, and `Notification` is unused.
+  Contract tests replay the captured samples.
+- **Files:** `src/ClaudeDeck.Agent/*`, `tests/ClaudeDeck.Agent.Tests/*`
+- **Verify:** `dotnet test`, including a replay of `docs/findings/hooks/*.jsonl`; `GET /sessions`
+  reports `Working` during a turn and `Idle` after it
+- **Commit:** `agent: derive session state from hook events`
+
+### Step 8: Connect the agent to the hub
+
+- **Change:** `ClaudeDeck.Protocol` with a versioned envelope, a WebSocket server in the plugin,
+  a client in the agent: token handshake, heartbeat, reconnect with backoff. The hub binds
+  `127.0.0.1` and additionally the WSL vEthernet address when present, discovered at runtime and
+  never hardcoded.
 - **Files:** `src/ClaudeDeck.Protocol/*`, `src/ClaudeDeck.Hub/*`, `src/ClaudeDeck.Agent/*`,
   `tests/ClaudeDeck.Hub.Tests/*`
-- **Verify:** an integration test starts a hub and an agent and checks the handshake,
-  rejection on a bad token, and reconnection after a drop
+- **Verify:** integration test covers handshake, rejection on a bad token and reconnection; an
+  agent inside WSL connects to the Windows hub
 - **Commit:** `hub: accept agent connections over authenticated websocket`
 
-### Step 13: Show a summary on a key
+### Step 9: Show connected agents and sessions on a key
 
-- **Change:** A `claudedeck.summary` action: "agents N / sessions M", rendered as an SVG
-  data URL, with coalesced updates. The first end-to-end path from hook to agent to hub to
-  hardware.
-- **Files:** `src/ClaudeDeck.Plugin/*`, `com.gyaltchik.claudedeck.sdPlugin/manifest.json`
-- **Verify:** on the device the numbers change when the agent starts and stops, and when a
-  new session opens
-- **Commit:** `plugin: show connected agents and session count on a key`
+- **Change:** A summary action: agents and session count. Completes the path from hook to agent
+  to hub to hardware.
+- **Files:** `src/ClaudeDeck.Plugin/Actions/*`
+- **Verify:** on the device the numbers change as agents start and stop and sessions open
+- **Commit:** `plugin: show connected agents and session count`
 
-### Step 14: Compute context size from the transcript
+### Step 10: Compute context size from the transcript
 
-- **Change:** `ClaudeDeck.Core` — incremental `.jsonl` reading by byte offset, extraction
-  of the last `assistant` record, and the `input + cache_creation + cache_read` sum. Golden
-  tests over a copy of a real transcript stripped of message text, paths and names, leaving
-  only structural fields and `usage`.
-- **Files:** `src/ClaudeDeck.Core/*`, `tests/ClaudeDeck.Core.Tests/*`, `tests/fixtures/*.jsonl`
-- **Verify:** `dotnet test` — the fixture is expected to yield 83,005 tokens, a value taken
-  from real data. Separately: the fixture contains no message content and no working paths,
-  because it is published in an open repository
+- **Change:** Incremental `.jsonl` reading by byte offset, last `assistant` record,
+  `input + cache_creation + cache_read`. Golden tests on a sanitized fixture.
+- **Files:** `src/ClaudeDeck.Core/Transcripts/*`, `tests/ClaudeDeck.Core.Tests/*`,
+  `tests/fixtures/*.jsonl`
+- **Verify:** `dotnet test` expects 83,005 tokens on the fixture; the fixture carries no message
+  content or real paths
 - **Commit:** `core: compute context size from transcript usage records`
 
-### Step 15: Map model identifiers to context window sizes
+### Step 11: Map models to context windows
 
-- **Change:** A `model → window` table handling the `[1m]` suffix; an unknown model yields
-  200k plus an "estimated" flag the UI can surface. Without this step, percentages for
-  `opus[1m]` are five times too high.
+- **Change:** `model → window` with the `[1m]` suffix parsed; unknown models fall back to 200k
+  and are flagged as estimates. Without this, `opus[1m]` reads five times too full.
 - **Files:** `src/ClaudeDeck.Core/*`, `tests/ClaudeDeck.Core.Tests/*`
-- **Verify:** `dotnet test`, covering `opus[1m]` → 1M, a plain model → 200k, and an unknown
-  model → estimated flag
+- **Verify:** `dotnet test` covering `claude-opus-5[1m]` → 1M, a plain model → 200k, unknown →
+  flagged
 - **Commit:** `core: map model identifiers to context window sizes`
 
-### Step 16: Report context fill level to the hub
+### Step 12: Report context fill to the hub
 
-- **Change:** The agent attaches a transcript reader to every registered session (debounced
-  polling, no file watchers) and sends the fill percentage to the hub as deltas.
+- **Change:** The agent attaches a transcript reader per session, debounced polling, sends the
+  percentage as deltas. Model and branch come from the transcript, since no hook payload carries
+  them.
 - **Files:** `src/ClaudeDeck.Agent/*`, `src/ClaudeDeck.Protocol/*`
-- **Verify:** `GET /sessions` shows the percentage rising as a session works, and dropping
-  after `PreCompact` fires
+- **Verify:** `GET /sessions` shows the percentage rising during a turn and dropping after
+  `PreCompact`
 - **Commit:** `agent: track context fill percentage per session`
 
-### Step 17: Render a session slot on a key
+### Step 13: Render the session slot
 
-- **Change:** A `claudedeck.session` action drawn as SVG: colour by state, ring by context
-  fill, label showing project and branch. Slots are dynamic but **sticky**: a session takes the lowest
-  free slot when it first appears and holds it until it ends. There is no reordering by
-  activity — otherwise keys move under your fingers, and in Phase 4 the same key will be
-  approving commands. A freed slot is reused only by a new session.
-- **Files:** `src/ClaudeDeck.Plugin/*`, `com.gyaltchik.claudedeck.sdPlugin/*`
-- **Verify:** on the device, two parallel sessions (one on Windows, one in WSL) occupy
-  different slots and change colour and ring independently; while one of them works
-  actively, neither slot moves; when a session ends its slot is freed and goes to the next
-  new one
+- **Change:** A session action: colour by state, ring by context, label of project and branch.
+  Slots are dynamic but sticky — lowest free slot on first sight, held until the session ends.
+- **Files:** `src/ClaudeDeck.Plugin/Actions/*`, `src/ClaudeDeck.Core/Rendering/*`
+- **Verify:** on the device, a Windows session and a WSL session occupy different slots and
+  update independently; neither moves while the other works; a freed slot goes to the next new
+  session
 - **Commit:** `plugin: render session slot with state colour and context ring`
 
-### Step 18: Detect dead sessions
+### Step 14: Detect dead sessions
 
-- **Change:** Capture the session process PID by walking ancestors on `SessionStart`, plus
-  transcript mtime tracking, with a transition to `Stale`. The inactivity-timeout fallback
-  is built at the same time, so the step closes even if PID detection proves unreliable.
+- **Change:** PID captured by walking ancestors at `SessionStart`, transcript mtime, transition
+  to `Stale`. The inactivity fallback is built at the same time. Not optional: a session left
+  open never emits `SessionEnd`, which Phase 0 observed directly.
 - **Files:** `src/ClaudeDeck.Agent/*`, `tests/ClaudeDeck.Agent.Tests/*`
-- **Verify:** close a terminal without ending the session cleanly — the slot goes `Stale`
-  within the configured timeout; tests cover the path where no PID was determined
+- **Verify:** closing a terminal without ending the session cleanly moves the slot to `Stale`
+  within the timeout; tests cover the path where no PID was found
 - **Commit:** `agent: mark sessions stale when the process is gone`
 
-### Step 19: Highlight sessions that need attention
+### Step 15: Highlight sessions needing attention
 
-- **Change:** A slot flashes on transition to `NeedsAttention` or `WaitingInput`, plus a
-  global alert mute key. This closes Phase 2: the product becomes usable day to day.
-- **Files:** `src/ClaudeDeck.Plugin/*`, `com.gyaltchik.claudedeck.sdPlugin/manifest.json`
-- **Verify:** on the device, a session waiting for an answer starts flashing; mute stops
-  the flashing without affecting the states themselves
+- **Change:** Slots flash on `WaitingInput`, plus a global alert mute. Closes session monitoring.
+- **Files:** `src/ClaudeDeck.Plugin/Actions/*`
+- **Verify:** on the device a session waiting for an answer flashes; mute stops the flashing
+  without changing the states
 - **Commit:** `plugin: alert on sessions needing attention`
 
 ---
 
-## Later phases (to be detailed after Step 8)
+## Later phases
 
-Breaking these into atomic steps now would be premature — their shape depends on the
-reconnaissance results.
-
-- **Phase 3 — usage. Now the lowest-risk phase, and it should run first.** Step 6 removed
-  every unknown: the endpoint, the auth flow, the refresh flow and the response shape are
-  all documented in [docs/findings/usage-source.md](docs/findings/usage-source.md), and
-  rendering is a string. What remains is one HTTP call behind `IUsageProvider`, a TTL cache
-  with backoff, and two keys reading `limits[]` for percentage, reset time and `severity`.
-  Recommended order change: run this immediately after the skeleton (Step 13), before
-  session monitoring, because it delivers a visible, useful key for a fraction of the work.
-  It will be broken into atomic steps once the skeleton is standing.
-- **Phase 4 — approve/deny.** The `permissions` rule matcher (design §6.3), three answers
-  with console parity (§6.2), the "Allow always" rule store with revocation, danger
-  classification, long press, and the safety rules in §6.4. The matcher's size is refined
-  by Step 7.
-- **Phase 5 — WSL and remote.** Transports based on Step 5, the NativeAOT hook shim
-  replacing `curl`, `claudedeck agent install` with automatic `settings.json` patching, and
-  groundwork for the SSH tunnel.
-- **Phase 6 — packaging.** Property Inspector, a ready-made Stream Deck + XL profile, a
-  `.streamDeckPlugin` release build from CI, a README with screenshots, and agent
-  installation instructions.
+- **Approve/deny.** The rule predictor (design §6.3), three answers with console parity, the
+  "Allow always" store with revocation, danger classification, long press, and §6.4 in full.
+  Broken into steps once session monitoring is standing.
+- **WSL and remote.** The NativeAOT hook shim replacing `curl`, `claudedeck agent install`
+  — which **must tell the user that hook changes require a session restart** — and the SSH
+  tunnel for remote machines.
+- **Packaging.** Property Inspector, a Stream Deck + XL profile, a `.streamDeckPlugin` release
+  built from CI, README with screenshots.
 
 ## Out of scope
 
-- Approve/deny in any form. Until Phase 4 the plugin makes no decisions and does not
-  interfere with sessions. Hooks in Phases 0 through 2 always hand control back without
-  deciding, the isolated Step 3 aside.
-- Displaying usage — that is Phase 3.
-- Remote machines over SSH — groundwork in the protocol, implementation after v1.
-- Sending prompts into a session, focusing a session's window, cost tracking — v2.
+- Approve/deny in any form until its phase. Until then the plugin makes no decisions: hooks
+  hand control back without deciding.
+- Sending prompts into a session, focusing a session's window, cost tracking.
 - macOS and Linux as the plugin host.
