@@ -30,6 +30,11 @@
             "type": "command",
             "command": "pwsh -NoProfile -NonInteractive -File tools/spike/capture-hook.ps1 -EventName PreToolUse",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -NonInteractive -File tools/spike/decide-hook.ps1",
+            "timeout": 10
           }
         ]
       }

@@ -14,7 +14,8 @@ the later phases (usage and approve/deny) depend on.
 - Design: [docs/design.md](docs/design.md). This plan implements Phases 0 through 2 of it.
 - Claude Code 2.1.232, installed both on Windows (`~/.claude`) and as a separate copy
   inside WSL Ubuntu-24.04. A second distribution, Ubuntu-20.04, is also running.
-- .NET SDK 10.0.302. Tests with xUnit, key rendering with SkiaSharp.
+- .NET SDK 10.0.302, tests with xUnit. Keys are drawn as SVG data URLs, with no imaging
+  library — see [docs/findings/rendering.md](docs/findings/rendering.md).
 - The repository is public from the first commit, which is where the sanitization
   requirements on reconnaissance artifacts and the early CI step come from.
 - Commit messages: imperative subject with a subsystem prefix (`agent: ...`,
@@ -38,9 +39,11 @@ the later phases (usage and approve/deny) depend on.
   day of work.
 - **The WSL → Windows transport may not come up in the user's configuration.** → Resolved
   by Step 5.
-- **The server-side `/usage` data source may be unavailable.** This is a gate decision for
-  Phase 3, not for this plan. → Investigated by Step 6; on a negative result Phase 3
-  becomes design §5.3 (absolute numbers, no percentages), and the user makes that call.
+- ~~**The server-side `/usage` data source may be unavailable.**~~ → **Resolved by Step 6.**
+  The endpoint is known and was confirmed with a live 200 response. Phase 3 keeps its full
+  shape and the §5.3 fallback is dropped. What remains is a smaller, permanent risk: the
+  endpoint is unofficial and can change with any Claude Code release, so the provider stays
+  behind an interface and the key degrades to "no data" rather than failing.
 - **The `permissions` rule replica may be larger than it looks.** → Sized by Step 7. The
   risk is bounded by construction: both possible prediction errors are safe (design §6.3).
 - **Detecting the session's PID by walking process ancestors may not work.** → Surfaces in
@@ -91,7 +94,10 @@ the later phases (usage and approve/deny) depend on.
   foundation of Phase 4.
 - **Files:** `tools/spike/decide-hook.ps1`, `docs/findings/pretooluse.md`
 - **Verify:** on `deny` the command does not run and the reason reaches the model; on
-  `allow` no prompt is shown; on `ask` the prompt appears as usual
+  `allow` no prompt is shown; on `ask` the prompt appears as usual.
+  Two constraints learned the hard way: the test must run **interactively**, because
+  headless permission semantics differ (Step 2), and it needs a **fresh session**, because
+  a hook added to an existing group is not picked up by a running one.
 - **Commit:** `spike: confirm PreToolUse permission decisions take effect`
 
 ### Step 4: Bring up a minimal plugin on the real device
@@ -116,18 +122,17 @@ the later phases (usage and approve/deny) depend on.
   Windows; findings record how that was achieved
 - **Commit:** `spike: verify WSL2 to Windows host transport`
 
-### Step 6: Investigate the data source behind `/usage`
+### Step 6: Investigate the data source behind `/usage` — done
 
-- **Change:** Determine where the client gets its `/usage` numbers, by intercepting CLI
-  traffic or analysing the bundle. Document the endpoint, headers and response shape, or
-  record with evidence that the source could not be found.
-- **Files:** `docs/findings/usage-source.md`
-- **Verify:** findings contain either a reproducible way to obtain the same percentages
-  and reset times `/usage` shows, or a "not found" conclusion describing what was tried.
-  This is the gate decision for Phase 3. **Nothing reaches the public repository** — not
-  the token, not fragments of it, not raw traffic dumps; only a description of the request
-  and response shape.
-- **Commit:** `spike: investigate usage data source`
+- **Change:** Determine where the client gets its `/usage` numbers. Resolved without
+  traffic interception: an existing plugin,
+  [Sing3Rous/stream-deck-ai-limits](https://github.com/Sing3Rous/stream-deck-ai-limits),
+  already documents the endpoint, and a live request confirmed it against this account.
+- **Files:** `docs/findings/usage-source.md`, `docs/findings/rendering.md`
+- **Verify:** a reproducible request returns the same percentages and reset times `/usage`
+  shows. Confirmed: HTTP 200 with both windows populated. Nothing token-related reaches the
+  repository — only the request and response shape.
+- **Commit:** `spike: resolve the usage data source`
 
 ### Step 7: Inventory the forms of `permissions` rules
 
@@ -196,9 +201,9 @@ the later phases (usage and approve/deny) depend on.
 
 ### Step 13: Show a summary on a key
 
-- **Change:** A `claudedeck.summary` action: "agents N / sessions M", rendered with
-  SkiaSharp, with coalesced updates. The first end-to-end path from hook to agent to hub
-  to hardware.
+- **Change:** A `claudedeck.summary` action: "agents N / sessions M", rendered as an SVG
+  data URL, with coalesced updates. The first end-to-end path from hook to agent to hub to
+  hardware.
 - **Files:** `src/ClaudeDeck.Plugin/*`, `com.gyaltchik.claudedeck.sdPlugin/manifest.json`
 - **Verify:** on the device the numbers change when the agent starts and stops, and when a
   new session opens
@@ -237,8 +242,8 @@ the later phases (usage and approve/deny) depend on.
 
 ### Step 17: Render a session slot on a key
 
-- **Change:** A `claudedeck.session` action: colour by state, ring by context fill, label
-  showing project and branch. Slots are dynamic but **sticky**: a session takes the lowest
+- **Change:** A `claudedeck.session` action drawn as SVG: colour by state, ring by context
+  fill, label showing project and branch. Slots are dynamic but **sticky**: a session takes the lowest
   free slot when it first appears and holds it until it ends. There is no reordering by
   activity — otherwise keys move under your fingers, and in Phase 4 the same key will be
   approving commands. A freed slot is reused only by a new session.
@@ -275,10 +280,14 @@ the later phases (usage and approve/deny) depend on.
 Breaking these into atomic steps now would be premature — their shape depends on the
 reconnaissance results.
 
-- **Phase 3 — usage.** `IUsageProvider` over the source found in Step 6; keys and encoders
-  for the 5-hour and weekly windows with percentage and reset time; polling with backoff;
-  an honest "no data" when unavailable. The shape of this phase follows the gate decision
-  in Step 6.
+- **Phase 3 — usage. Now the lowest-risk phase, and it should run first.** Step 6 removed
+  every unknown: the endpoint, the auth flow, the refresh flow and the response shape are
+  all documented in [docs/findings/usage-source.md](docs/findings/usage-source.md), and
+  rendering is a string. What remains is one HTTP call behind `IUsageProvider`, a TTL cache
+  with backoff, and two keys reading `limits[]` for percentage, reset time and `severity`.
+  Recommended order change: run this immediately after the skeleton (Step 13), before
+  session monitoring, because it delivers a visible, useful key for a fraction of the work.
+  It will be broken into atomic steps once the skeleton is standing.
 - **Phase 4 — approve/deny.** The `permissions` rule matcher (design §6.3), three answers
   with console parity (§6.2), the "Allow always" rule store with revocation, danger
   classification, long press, and the safety rules in §6.4. The matcher's size is refined

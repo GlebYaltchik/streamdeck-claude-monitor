@@ -373,8 +373,8 @@ usage summary key.
 Both usage keys show a percentage, a bar and the window's reset time — exactly what
 `/usage` shows.
 
-**Rendering:** SkiaSharp, 144×144 PNG. Updates are coalesced to no more than ~4 Hz with a
-dirty flag per key, otherwise the Stream Deck WebSocket chokes.
+**Rendering:** SVG data URLs on a 144×144 canvas. Updates are coalesced to no more than
+~4 Hz with a dirty flag per key, otherwise the Stream Deck WebSocket chokes.
 
 ---
 
@@ -397,7 +397,8 @@ dirty flag per key, otherwise the Stream Deck WebSocket chokes.
 com.gyaltchik.claudedeck.sdPlugin/
 ```
 
-**Stack:** .NET 10, SkiaSharp for rendering, System.Net.WebSockets, xUnit.
+**Stack:** .NET 10, System.Net.WebSockets, xUnit. Keys are composed as SVG data URLs with
+no imaging library — see [findings/rendering.md](findings/rendering.md).
 
 **Stream Deck library:** start with BarRaider's StreamDeck-Tools, but **all contact with
 the SDK is isolated behind `IDeckConnection`**. The device is new; if the library turns
@@ -509,5 +510,7 @@ usage breakdowns by model, project or cost — the goal is parity with `/usage`,
    dangerous in Phase 4, where the same key approves commands.
 
 **Open:**
-1. What to do if Phase 0 cannot find the usage source: accept the estimate mode in §5.3,
-   or defer the feature entirely?
+
+Nothing outstanding. The one open question — what to do if the usage source could not be
+found — was answered by [findings/usage-source.md](findings/usage-source.md): it was found
+and confirmed, so §5.3 is dropped and the feature keeps its full shape.
