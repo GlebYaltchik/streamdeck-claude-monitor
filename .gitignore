@@ -12,6 +12,9 @@ appsettings.*.local.json
 !tests/fixtures/**/*.jsonl
 !docs/findings/**/*.jsonl
 
+# Raw spike output before sanitization. Never committed.
+.spike/
+
 # --- .NET ---
 bin/
 obj/
