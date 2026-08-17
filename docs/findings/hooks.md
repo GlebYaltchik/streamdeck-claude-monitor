@@ -3,7 +3,8 @@
 Captured from Claude Code 2.1.232 on two platforms:
 
 - **WSL2 (Ubuntu-24.04)** — two headless `claude -p` runs in a scratch project.
-- **Windows** — a live desktop session working in this repository.
+- **Windows** — live desktop sessions working in this repository, including one started
+  specifically to exercise a permission prompt and a manual `/compact`.
 
 Sanitized samples live in [hooks/](hooks/), one `.jsonl` file per event, produced by
 `tools/spike/sanitize-hooks.py`. Structure is preserved exactly; only free text, file
@@ -19,9 +20,9 @@ contents, command output and real paths are replaced.
 | `PostToolUse` | yes (both) | |
 | `Stop` | yes (WSL) | |
 | `SessionEnd` | yes (WSL) | |
-| `SubagentStop` | yes (WSL) | |
-| `Notification` | **no** | Needs an interactive session — headless never prompts |
-| `PreCompact` | **no** | Needs a real compaction |
+| `SubagentStop` | yes (both) | |
+| `PreCompact` | yes (Windows) | `trigger=manual` |
+| `Notification` | **never fired** | See below — it did not fire even for a real permission prompt |
 
 ## Payload schema
 
@@ -30,7 +31,8 @@ Additional fields per event:
 
 | Event | Additional fields |
 |---|---|
-| `SessionStart` | `source` (`startup` observed) |
+| `SessionStart` | `source` (`startup` and `compact` observed) |
+| `PreCompact` | `trigger` (`manual` observed) |
 | `UserPromptSubmit` | `permission_mode`, `prompt`, `prompt_id` |
 | `PreToolUse` | `permission_mode`, `prompt_id`, `tool_name`, `tool_input`, `tool_use_id`, `effort` |
 | `PostToolUse` | the above plus `tool_response`, `duration_ms` |
@@ -56,6 +58,18 @@ Additional fields per event:
 
 ## Assumptions refuted
 
+- **`Notification` does not fire for a permission prompt.** This is the important one.
+  Design §4.1 planned to detect "waiting for approval" from `Notification`. A Windows
+  session was driven into a real permission prompt — Claude Code displayed the dialog and
+  the user approved it — and no `Notification` hook ran. The hook is configured in the
+  same shape as every hook that did fire, so the configuration is not the explanation.
+  The 60-second idle trigger was not tested separately, but the design no longer depends
+  on either.
+
+  **What to use instead:** `PreToolUse` fires *before* the prompt is displayed. When our
+  own gate returns `ask`, we know with certainty that a dialog is on screen right now.
+  That is a fact derived from our own decision rather than a signal we have to hope for,
+  and it is strictly more reliable than what was planned.
 - **No `model` field in any hook payload.** Design §4.1 assumed `SessionStart` would
   supply the model. It does not. The model has to come from the transcript, which the
   agent reads anyway for context size.
@@ -82,6 +96,18 @@ Additional fields per event:
 - **In headless mode `--allowedTools` did not prevent `Bash` from running.** Permission
   semantics under `claude -p` differ from interactive use. Step 3 must be verified
   interactively, not headlessly, or its result will not mean what it appears to mean.
+- **Compaction reuses the session.** A manual `/compact` produced `PreCompact` followed by
+  a second `SessionStart` with `source=compact` and **the same `session_id`**. The registry
+  must treat that as the same session continuing, otherwise a compaction would move the
+  session to a different key.
+- **`acceptEdits` was observed as a live `permission_mode`,** and a `Bash` call still
+  prompted while it was active. That is the predictor in design §6.3 working exactly as
+  designed: the mode covers edits, not commands, so mode alone is not sufficient and the
+  rule chain still has to be evaluated.
+- **A session that is simply left open never emits `SessionEnd`.** One captured session has
+  a `SessionStart` and no end, because the user had no obvious way to close it. This is
+  direct evidence for the liveness problem in design §4.1: `SessionEnd` cannot be relied on
+  to retire a slot, and the PID and mtime fallbacks are mandatory rather than defensive.
 
 ## Cost of the recorder
 
@@ -93,7 +119,8 @@ use.
 
 ## Still outstanding
 
-`Notification` and `PreCompact` are not captured, and the Windows session produced only
-tool events. Completing this needs one interactive Windows session started after the hook
-configuration is in place, which triggers a permission prompt and then sits idle for over
-a minute.
+Only the 60-second idle variant of `Notification` is untested. It is not worth chasing:
+the design no longer uses `Notification` for anything, since `PreToolUse` gives a more
+reliable signal for the one state that mattered.
+
+Nothing else blocks the next steps.

@@ -2,6 +2,10 @@
 
 Design document. Version 0.1 (draft for discussion).
 
+> Reconnaissance is in progress. Where [docs/findings/](findings/) contradicts this
+> document, the findings win — they are measurements, this is a plan. They are folded back
+> in at Step 8 of [PLAN.md](../PLAN.md).
+
 ---
 
 ## 1. Goal and scope
