@@ -20,6 +20,22 @@
   ],
   "Actions": [
     {
+      "Name": "Usage",
+      "UUID": "com.gyaltchik.claudedeck.usage",
+      "Icon": "imgs/key",
+      "Tooltip": "Claude Code usage: the five-hour or weekly window, with the time it resets.",
+      "PropertyInspectorPath": "ui/usage.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "middle"
+        }
+      ]
+    },
+    {
       "Name": "Placeholder",
       "UUID": "com.gyaltchik.claudedeck.placeholder",
       "Icon": "imgs/key",

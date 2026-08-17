@@ -75,7 +75,8 @@ public sealed class ClaudeUsageProvider(
                 return Expired(now);
 
             case FetchOutcome.RateLimited:
-                return UsageSnapshot.Failure(UsageStatus.RateLimited, result.Message ?? "Rate limited.", now);
+                return UsageSnapshot.Failure(UsageStatus.RateLimited, result.Message ?? "Rate limited.", now)
+                    with { RetryAfter = result.RetryAfter };
 
             default:
                 return UsageSnapshot.Failure(UsageStatus.Unavailable, result.Message ?? "Usage unavailable.", now);

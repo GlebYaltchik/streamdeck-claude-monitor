@@ -36,7 +36,10 @@ public sealed record UsageSnapshot(
     UsageStatus Status,
     IReadOnlyList<UsageWindow> Windows,
     DateTimeOffset RetrievedAt,
-    string? Message = null)
+    string? Message = null,
+    bool Stale = false,
+    /// <summary>How long the server asked us to wait, when it said so.</summary>
+    TimeSpan? RetryAfter = null)
 {
     public const string SessionGroup = "session";
     public const string WeeklyGroup = "weekly";

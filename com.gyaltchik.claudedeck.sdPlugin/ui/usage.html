@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>ClaudeDeck Usage</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 12px;
+      font-family: "Segoe UI", sans-serif;
+      font-size: 12px;
+      color: #d8d8d8;
+      background: #2d2d2d;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 4px;
+      color: #9aa4b2;
+    }
+
+    select,
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 5px 6px;
+      color: #d8d8d8;
+      background: #3d3d3d;
+      border: 1px solid #4a4a4a;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+
+    .hint {
+      margin: 5px 0 0;
+      color: #7a828c;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="field">
+    <label for="window">Window</label>
+    <select id="window">
+      <option value="session">5-hour</option>
+      <option value="weekly">Weekly</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="credentialsPath">Credentials file</label>
+    <input id="credentialsPath" type="text" placeholder="found automatically" spellcheck="false">
+    <p class="hint">
+      Leave empty to search the local profile and every installed WSL distribution.
+      Set a path only to pin a specific account.
+    </p>
+  </div>
+
+  <script>
+    let websocket = null;
+    let propertyInspectorUuid = null;
+    let settings = {};
+
+    const windowField = document.getElementById('window');
+    const pathField = document.getElementById('credentialsPath');
+
+    function connectElgatoStreamDeckSocket(port, uuid, registerEvent, info, actionInfo) {
+      propertyInspectorUuid = uuid;
+
+      try {
+        settings = JSON.parse(actionInfo).payload.settings || {};
+      } catch (error) {
+        settings = {};
+      }
+
+      websocket = new WebSocket('ws://127.0.0.1:' + port);
+      websocket.onopen = () => {
+        websocket.send(JSON.stringify({ event: registerEvent, uuid: propertyInspectorUuid }));
+        show();
+      };
+    }
+
+    function show() {
+      windowField.value = settings.window === 'weekly' ? 'weekly' : 'session';
+      pathField.value = settings.credentialsPath || '';
+    }
+
+    function save() {
+      if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+        return;
+      }
+
+      settings.window = windowField.value;
+
+      const path = pathField.value.trim();
+      if (path) {
+        settings.credentialsPath = path;
+      } else {
+        delete settings.credentialsPath;
+      }
+
+      websocket.send(JSON.stringify({
+        event: 'setSettings',
+        context: propertyInspectorUuid,
+        payload: settings
+      }));
+    }
+
+    windowField.addEventListener('change', save);
+    pathField.addEventListener('change', save);
+  </script>
+</body>
+
+</html>

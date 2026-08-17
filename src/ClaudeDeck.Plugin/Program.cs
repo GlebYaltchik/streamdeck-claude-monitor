@@ -4,6 +4,12 @@ namespace ClaudeDeck.Plugin;
 
 internal static class Program
 {
+    /// <summary>
+    /// How often visible keys are redrawn. The endpoint is not polled this often — the
+    /// provider's cache decides that — but the reset countdown has to keep moving.
+    /// </summary>
+    private static readonly TimeSpan RedrawInterval = TimeSpan.FromSeconds(20);
+
     private static async Task<int> Main(string[] args)
     {
         var arguments = StreamDeckArguments.Parse(args);
@@ -15,21 +21,20 @@ internal static class Program
 
         PluginLog.Write($"starting on port {arguments.Port}");
 
+        using var usage = new UsageService();
         await using var connection = new StreamDeckConnection(arguments);
+
+        var usageAction = new UsageAction(connection, usage);
         var actions = new IDeckAction[]
         {
+            usageAction,
             new PlaceholderAction(connection),
         }.ToDictionary(action => action.Uuid, StringComparer.Ordinal);
 
         connection.EventReceived += deckEvent =>
-        {
-            if (deckEvent.Action is not null && actions.TryGetValue(deckEvent.Action, out var action))
-            {
-                return action.HandleAsync(deckEvent);
-            }
-
-            return Task.CompletedTask;
-        };
+            deckEvent.Action is not null && actions.TryGetValue(deckEvent.Action, out var action)
+                ? action.HandleAsync(deckEvent)
+                : Task.CompletedTask;
 
         using var shutdown = new CancellationTokenSource();
         Console.CancelKeyPress += (_, eventArgs) =>
@@ -37,6 +42,8 @@ internal static class Program
             eventArgs.Cancel = true;
             shutdown.Cancel();
         };
+
+        var redrawing = RedrawAsync(usageAction, shutdown.Token);
 
         try
         {
@@ -47,8 +54,33 @@ internal static class Program
             PluginLog.Write($"fatal: {ex}");
             return 1;
         }
+        finally
+        {
+            await shutdown.CancelAsync();
+            await redrawing;
+        }
 
         PluginLog.Write("stopped");
         return 0;
+    }
+
+    private static async Task RedrawAsync(UsageAction usageAction, CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(RedrawInterval, cancellationToken);
+                await usageAction.RefreshAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Write($"redraw failed: {ex.Message}");
+            }
+        }
     }
 }

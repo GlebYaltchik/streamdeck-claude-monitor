@@ -45,6 +45,31 @@ public sealed class KeyImage
         return this;
     }
 
+    /// <summary>
+    /// A horizontal progress bar. Cheaper on vertical space than a ring, which matters at
+    /// 144 pixels once the text is large enough to read at arm's length.
+    /// </summary>
+    /// <param name="fraction">Filled portion, clamped to 0..1.</param>
+    public KeyImage Bar(double fraction, string colour, string trackColour, int y, int height = 10, int margin = 14)
+    {
+        var full = Size - 2 * margin;
+        var filled = (int)Math.Round(full * Math.Clamp(fraction, 0, 1));
+        var radius = height / 2;
+
+        _elements.Append($"""
+            <rect x="{margin}" y="{y}" width="{full}" height="{height}" rx="{radius}" fill="{trackColour}"/>
+            """);
+
+        if (filled > 0)
+        {
+            _elements.Append($"""
+                <rect x="{margin}" y="{y}" width="{filled}" height="{height}" rx="{radius}" fill="{colour}"/>
+                """);
+        }
+
+        return this;
+    }
+
     public KeyImage Text(string value, int y, int fontSize, string colour, bool bold = false)
     {
         var weight = bold ? """ font-weight="bold" """ : " ";
