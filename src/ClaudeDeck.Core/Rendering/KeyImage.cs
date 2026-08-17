@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace ClaudeDeck.Core.Rendering;
@@ -29,12 +30,16 @@ public sealed class KeyImage
         var circumference = 2 * Math.PI * radius;
         var filled = circumference * Math.Clamp(fraction, 0, 1);
 
+        // Numbers must be invariant. On a comma-decimal locale "72,26 289,03" is read by SVG
+        // as four dash lengths rather than two, which silently draws the wrong ring.
+        var dashArray = $"{Number(filled)} {Number(circumference)}";
+
         _elements.Append($"""
             <circle cx="{Centre}" cy="{Centre}" r="{radius}" fill="none" stroke="{trackColour}" stroke-width="{width}"/>
             """);
         _elements.Append($"""
             <circle cx="{Centre}" cy="{Centre}" r="{radius}" fill="none" stroke="{colour}" stroke-width="{width}"
-                    stroke-linecap="round" stroke-dasharray="{filled:F2} {circumference:F2}"
+                    stroke-linecap="round" stroke-dasharray="{dashArray}"
                     transform="rotate(-90 {Centre} {Centre})"/>
             """);
         return this;
@@ -61,6 +66,8 @@ public sealed class KeyImage
     {
         return "data:image/svg+xml;base64," + Convert.ToBase64String(Encoding.UTF8.GetBytes(ToSvg()));
     }
+
+    private static string Number(double value) => value.ToString("F2", CultureInfo.InvariantCulture);
 
     private static string Escape(string value)
     {
