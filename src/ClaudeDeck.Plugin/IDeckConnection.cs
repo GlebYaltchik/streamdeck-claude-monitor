@@ -11,4 +11,10 @@ internal interface IDeckConnection
 
     /// <summary>Drops any queued state for a control that has gone away.</summary>
     void Forget(string context);
+
+    /// <summary>
+    /// Persists a control's settings, so a choice made on the hardware survives a restart
+    /// the same way one made in the Property Inspector does.
+    /// </summary>
+    Task SaveSettingsAsync(string context, object settings);
 }

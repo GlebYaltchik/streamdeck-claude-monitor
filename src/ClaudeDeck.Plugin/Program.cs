@@ -28,7 +28,6 @@ internal static class Program
         var actions = new IDeckAction[]
         {
             usageAction,
-            new PlaceholderAction(connection),
         }.ToDictionary(action => action.Uuid, StringComparer.Ordinal);
 
         connection.EventReceived += deckEvent =>

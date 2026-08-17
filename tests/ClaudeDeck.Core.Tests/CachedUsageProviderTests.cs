@@ -39,15 +39,56 @@ public class CachedUsageProviderTests
     [Fact]
     public async Task Forcing_a_refresh_skips_the_cooling_period()
     {
-        var (_, inner, cache) = Build();
+        var (clock, inner, cache) = Build();
+        inner.Results.Add(Ok(24));
+        inner.Results.Add(Ok(25));
+
+        await cache.GetUsageAsync();
+        clock.Advance(TimeSpan.FromMinutes(1));
+        cache.Invalidate();
+        await cache.GetUsageAsync();
+
+        Assert.Equal(2, inner.Calls);
+    }
+
+    [Fact]
+    public async Task Holding_the_refresh_button_does_not_become_a_burst_of_requests()
+    {
+        var (clock, inner, cache) = Build();
+        inner.Results.Add(Ok(24));
+
+        await cache.GetUsageAsync();
+
+        // A refresh button gets pressed repeatedly, and that is how a client earns a rate
+        // limit rather than fresher data.
+        for (var i = 0; i < 10; i++)
+        {
+            cache.Invalidate();
+            await cache.GetUsageAsync();
+            clock.Advance(TimeSpan.FromSeconds(1));
+        }
+
+        Assert.Equal(1, inner.Calls);
+    }
+
+    [Fact]
+    public async Task A_refresh_asked_for_later_still_reaches_the_endpoint()
+    {
+        var (clock, inner, cache) = Build();
         inner.Results.Add(Ok(24));
         inner.Results.Add(Ok(25));
 
         await cache.GetUsageAsync();
         cache.Invalidate();
         await cache.GetUsageAsync();
+        Assert.Equal(1, inner.Calls);
+
+        clock.Advance(TimeSpan.FromMinutes(1));
+        cache.Invalidate();
+        var snapshot = await cache.GetUsageAsync();
 
         Assert.Equal(2, inner.Calls);
+        Assert.Equal(25, snapshot.Session!.Percent);
     }
 
     [Fact]
@@ -138,6 +179,25 @@ public class CachedUsageProviderTests
         await cache.GetUsageAsync();
 
         Assert.Equal(1, inner.Calls);
+    }
+
+    [Fact]
+    public async Task A_rate_limit_without_a_hint_waits_far_longer_than_a_network_failure()
+    {
+        var (clock, inner, cache) = Build();
+        inner.Results.Add(Failure(UsageStatus.RateLimited, "slow down"));
+
+        await cache.GetUsageAsync();
+
+        // Measured against the real endpoint: the generic 30-second backoff walked straight
+        // into a second rate limit. Being told to back off is not a flaky connection.
+        clock.Advance(TimeSpan.FromMinutes(4));
+        await cache.GetUsageAsync();
+        Assert.Equal(1, inner.Calls);
+
+        clock.Advance(TimeSpan.FromMinutes(2));
+        await cache.GetUsageAsync();
+        Assert.Equal(2, inner.Calls);
     }
 
     private static (TestClock, FakeProvider, CachedUsageProvider) Build()

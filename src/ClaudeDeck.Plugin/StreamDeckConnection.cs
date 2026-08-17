@@ -30,6 +30,9 @@ internal sealed class StreamDeckConnection : IDeckConnection, IAsyncDisposable
 
     public void Forget(string context) => _updates.Forget(context);
 
+    public Task SaveSettingsAsync(string context, object settings) =>
+        SendAsync(new { @event = "setSettings", context, payload = settings });
+
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         await _socket.ConnectAsync(new Uri($"ws://127.0.0.1:{_arguments.Port}"), cancellationToken);
@@ -117,11 +120,25 @@ internal sealed class StreamDeckConnection : IDeckConnection, IAsyncDisposable
                 context,
                 payload = new { image = image.DataUrl, target = 0 },
             }),
-            FeedbackUpdate feedback => SendAsync(new
+            // The indicator accepts either a bare value or an object carrying layout
+            // properties. The object form is only used when there is a colour to set, so a
+            // layout that does not understand it is never handed one.
+            FeedbackUpdate { IndicatorColour: null } feedback => SendAsync(new
             {
                 @event = "setFeedback",
                 context,
                 payload = new { title = feedback.Title, value = feedback.Value, indicator = feedback.Indicator },
+            }),
+            FeedbackUpdate feedback => SendAsync(new
+            {
+                @event = "setFeedback",
+                context,
+                payload = new
+                {
+                    title = feedback.Title,
+                    value = feedback.Value,
+                    indicator = new { value = feedback.Indicator, bar_fill_c = feedback.IndicatorColour },
+                },
             }),
             _ => Task.CompletedTask,
         };

@@ -12,6 +12,17 @@ internal sealed record UsageSettings(string? CredentialsPath, string Window)
 
     public string Label => Window == UsageSnapshot.WeeklyGroup ? "WEEK" : "5 HOUR";
 
+    /// <summary>There are two windows, so switching is a toggle.</summary>
+    public UsageSettings Switched() => this with
+    {
+        Window = Window == UsageSnapshot.WeeklyGroup ? UsageSnapshot.SessionGroup : UsageSnapshot.WeeklyGroup,
+    };
+
+    /// <summary>The shape the Property Inspector reads back.</summary>
+    public object ToPayload() => CredentialsPath is null
+        ? new { window = Window }
+        : new { window = Window, credentialsPath = CredentialsPath };
+
     public static UsageSettings From(JsonElement payload)
     {
         if (payload.ValueKind != JsonValueKind.Object ||

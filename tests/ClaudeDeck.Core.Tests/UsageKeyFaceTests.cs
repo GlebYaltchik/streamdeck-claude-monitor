@@ -79,6 +79,41 @@ public class UsageKeyFaceTests
         Assert.Contains("#e05252", normal);
     }
 
+    [Fact]
+    public void The_strip_carries_the_reset_time_alongside_the_label()
+    {
+        var strip = UsageKeyFace.RenderStrip(Ok(24), UsageSnapshot.SessionGroup, "5 HOUR", Now);
+
+        Assert.Equal("5 HOUR · 2h", strip.Title);
+        Assert.Equal("24%", strip.Value);
+        Assert.Equal(24, strip.Indicator);
+    }
+
+    [Fact]
+    public void The_strip_drops_the_separator_when_there_is_no_reset_time()
+    {
+        var snapshot = new UsageSnapshot(
+            UsageStatus.Ok,
+            [new UsageWindow(UsageSnapshot.SessionGroup, "session", 24, "normal", null, true)],
+            Now);
+
+        var strip = UsageKeyFace.RenderStrip(snapshot, UsageSnapshot.SessionGroup, "5 HOUR", Now);
+
+        Assert.Equal("5 HOUR", strip.Title);
+    }
+
+    [Fact]
+    public void The_strip_says_why_it_has_nothing_to_show()
+    {
+        var snapshot = UsageSnapshot.Failure(UsageStatus.AuthRequired, "no credentials", Now);
+
+        var strip = UsageKeyFace.RenderStrip(snapshot, UsageSnapshot.SessionGroup, "WEEK", Now);
+
+        Assert.Equal("WEEK · log in", strip.Title);
+        Assert.Equal("--", strip.Value);
+        Assert.Equal(0, strip.Indicator);
+    }
+
     private static string Render(UsageSnapshot snapshot) =>
         UsageKeyFace.Render(snapshot, UsageSnapshot.SessionGroup, "5 HOUR", Now);
 

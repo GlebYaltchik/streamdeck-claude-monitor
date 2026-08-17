@@ -8,4 +8,5 @@ internal abstract record DeckUpdate;
 
 internal sealed record ImageUpdate(string DataUrl) : DeckUpdate;
 
-internal sealed record FeedbackUpdate(string Title, string Value, int Indicator) : DeckUpdate;
+internal sealed record FeedbackUpdate(string Title, string Value, int Indicator, string? IndicatorColour = null)
+    : DeckUpdate;

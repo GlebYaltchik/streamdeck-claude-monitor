@@ -57,6 +57,31 @@ public static class UsageKeyFace
     }
 
     /// <summary>
+    /// The same window on an encoder's touch strip. The strip is wide and short, so the
+    /// reset time rides along with the label instead of taking its own line.
+    /// </summary>
+    public static UsageStripFace RenderStrip(UsageSnapshot snapshot, string group, string label, DateTimeOffset now)
+    {
+        var window = snapshot.Find(group);
+        if (window is null)
+        {
+            var reason = snapshot.Status switch
+            {
+                UsageStatus.AuthRequired => "log in",
+                UsageStatus.RateLimited => "throttled",
+                _ => "no data",
+            };
+
+            return new UsageStripFace($"{label} · {reason}", "--", 0, Track);
+        }
+
+        var suffix = snapshot.Stale ? "stale" : Remaining(window.ResetsAt - now);
+        var title = suffix.Length == 0 ? label : $"{label} · {suffix}";
+
+        return new UsageStripFace(title, $"{window.Percent}%", window.Percent, Colour(window));
+    }
+
+    /// <summary>
     /// How long is left, at the coarsest useful precision. A weekly window measured in hours
     /// is a number nobody can act on, so past a day it reads in days.
     /// </summary>
