@@ -1,12 +1,15 @@
 # ClaudeDeck
 
+[![build](https://github.com/GlebYaltchik/streamdeck-claude-monitor/actions/workflows/build.yml/badge.svg)](https://github.com/GlebYaltchik/streamdeck-claude-monitor/actions/workflows/build.yml)
+
 A Stream Deck plugin for [Claude Code](https://claude.com/claude-code): see what every
 session is doing, how full its context is, and how much of your usage window is left —
 then approve or deny what the agent wants to do, from a physical key.
 
-> **Status: early. There is no code yet — only a design and a plan.**
-> Development starts with a reconnaissance phase that verifies every assumption
-> against a real installation before anything is built on top of it.
+> **Status: early, but no longer speculative.** Reconnaissance is complete — every
+> assumption in the design was measured against a real installation, and the results are
+> in [docs/findings](docs/findings). A plugin skeleton runs on the device and usage is
+> retrieved from the live endpoint. Nothing is on a key yet.
 
 ## Planned capabilities
 

@@ -1,0 +1,33 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    # Windows, because that is what the plugin targets. Nothing is Windows-specific yet, but
+    # the agent and plugin will get there, and moving CI later is worse than starting here.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore ClaudeDeck.slnx
+
+      - name: Build
+        run: dotnet build ClaudeDeck.slnx --no-restore -c Release
+
+      - name: Test
+        run: dotnet test ClaudeDeck.slnx --no-build -c Release
+
+      # The deliverable is a published plugin folder, not a library. Publishing here catches
+      # breakage that a plain build does not.
+      - name: Publish the plugin
+        run: dotnet publish src/ClaudeDeck.Plugin/ClaudeDeck.Plugin.csproj -c Release -o artifacts/plugin
