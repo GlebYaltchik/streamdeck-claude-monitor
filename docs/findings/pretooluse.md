@@ -51,7 +51,13 @@ Two constraints, both learned by getting them wrong first:
 - **The test must be interactive.** Under `claude -p`, `--allowedTools` did not stop `Bash`
   from running (see [hooks.md](hooks.md)), so a headless result would not have meant what it
   appeared to mean.
-- **A hook added to an existing group is not picked up by a running session.** The first
-  attempt produced no decision at all: the recorder in the same group kept firing while the
-  newly added decision hook never ran. Installing or changing the agent's hooks requires a
-  session restart, and the installer must say so.
+- **Hook reloading in a running session is unreliable, in both directions.** The first
+  attempt here produced no decision at all: a decision hook added as a second entry in an
+  existing group never ran, while the recorder beside it kept firing. Later, replacing the
+  whole `settings.json` with entirely new commands *was* picked up by an already-running
+  session without a restart.
+
+  So a change may or may not take effect immediately, and which it will be is not something
+  to rely on. The installer should still tell the user to restart their sessions: that
+  advice is correct either way, and the alternative is a user concluding the plugin is
+  broken when it merely has not reloaded.

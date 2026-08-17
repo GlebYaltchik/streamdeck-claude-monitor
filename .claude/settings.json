@@ -1,4 +1,95 @@
 {
-  "_comment": "Reconnaissance hooks lived here during Phase 0. They are unregistered now that every payload is captured; the scripts remain in tools/spike/. See docs/findings/hooks.md.",
-  "hooks": {}
+  "_comment": "Sends Claude Code hook events to the local ClaudeDeck agent. The agent replies 204 with no body, so nothing here influences a session. A short connect timeout keeps the cost of a stopped agent at roughly one curl startup. Notification is deliberately absent: it was measured never to fire, see docs/findings/hooks.md.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s --connect-timeout 0.1 --max-time 2 -X POST --data-binary \"@-\" http://127.0.0.1:17800/hook/SessionStart",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s --connect-timeout 0.1 --max-time 2 -X POST --data-binary \"@-\" http://127.0.0.1:17800/hook/UserPromptSubmit",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s --connect-timeout 0.1 --max-time 2 -X POST --data-binary \"@-\" http://127.0.0.1:17800/hook/PreToolUse",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s --connect-timeout 0.1 --max-time 2 -X POST --data-binary \"@-\" http://127.0.0.1:17800/hook/PostToolUse",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s --connect-timeout 0.1 --max-time 2 -X POST --data-binary \"@-\" http://127.0.0.1:17800/hook/Stop",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s --connect-timeout 0.1 --max-time 2 -X POST --data-binary \"@-\" http://127.0.0.1:17800/hook/SubagentStop",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s --connect-timeout 0.1 --max-time 2 -X POST --data-binary \"@-\" http://127.0.0.1:17800/hook/PreCompact",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s --connect-timeout 0.1 --max-time 2 -X POST --data-binary \"@-\" http://127.0.0.1:17800/hook/SessionEnd",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
 }

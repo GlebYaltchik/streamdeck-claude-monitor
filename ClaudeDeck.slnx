@@ -1,9 +1,11 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/ClaudeDeck.Agent/ClaudeDeck.Agent.csproj" />
     <Project Path="src/ClaudeDeck.Core/ClaudeDeck.Core.csproj" />
     <Project Path="src/ClaudeDeck.Plugin/ClaudeDeck.Plugin.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/ClaudeDeck.Agent.Tests/ClaudeDeck.Agent.Tests.csproj" />
     <Project Path="tests/ClaudeDeck.Core.Tests/ClaudeDeck.Core.Tests.csproj" />
   </Folder>
 </Solution>
