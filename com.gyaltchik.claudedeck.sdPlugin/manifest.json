@@ -1,8 +1,8 @@
 {
-  "Name": "ClaudeDeck Probe",
-  "Version": "0.0.1.0",
+  "Name": "ClaudeDeck",
+  "Version": "0.1.0.0",
   "Author": "Gleb Yaltchik",
-  "Description": "Phase 0 probe: reports what the device is and validates SVG keys and encoder feedback.",
+  "Description": "Claude Code usage limits and live session state on your Stream Deck.",
   "Category": "ClaudeDeck",
   "CategoryIcon": "imgs/plugin",
   "Icon": "imgs/plugin",
@@ -20,38 +20,25 @@
   ],
   "Actions": [
     {
-      "Name": "Probe Key",
-      "UUID": "com.gyaltchik.claudedeck.probe-key",
+      "Name": "Placeholder",
+      "UUID": "com.gyaltchik.claudedeck.placeholder",
       "Icon": "imgs/key",
-      "Tooltip": "Draws an SVG image to prove keys need no imaging library.",
+      "Tooltip": "Skeleton action. Real actions replace it as they are built.",
       "Controllers": [
-        "Keypad"
-      ],
-      "States": [
-        {
-          "Image": "imgs/key",
-          "TitleAlignment": "middle"
-        }
-      ]
-    },
-    {
-      "Name": "Probe Dial",
-      "UUID": "com.gyaltchik.claudedeck.probe-dial",
-      "Icon": "imgs/key",
-      "Tooltip": "Counts rotation ticks to prove encoders and the touch strip work.",
-      "Controllers": [
+        "Keypad",
         "Encoder"
       ],
       "Encoder": {
         "layout": "$B1",
         "TriggerDescription": {
-          "Rotate": "Count ticks",
+          "Rotate": "Nothing yet",
           "Push": "Nothing yet"
         }
       },
       "States": [
         {
-          "Image": "imgs/key"
+          "Image": "imgs/key",
+          "TitleAlignment": "middle"
         }
       ]
     }

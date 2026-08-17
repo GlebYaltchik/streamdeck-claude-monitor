@@ -10,4 +10,8 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\ClaudeDeck.Core\ClaudeDeck.Core.csproj" />
+  </ItemGroup>
+
 </Project>

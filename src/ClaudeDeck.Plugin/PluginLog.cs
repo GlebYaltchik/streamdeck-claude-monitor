@@ -1,12 +1,12 @@
 namespace ClaudeDeck.Plugin;
 
 /// <summary>
-/// Append-only log next to the plugin. Stream Deck gives a plugin no console, so this file
-/// is the only way to see what the device actually reported.
+/// Append-only log next to the executable. Stream Deck gives a plugin no console, so this is
+/// the only way to see what happened.
 /// </summary>
-internal static class ProbeLog
+internal static class PluginLog
 {
-    private static readonly string Path = System.IO.Path.Combine(AppContext.BaseDirectory, "probe.log");
+    private static readonly string Path = System.IO.Path.Combine(AppContext.BaseDirectory, "claudedeck.log");
     private static readonly Lock Gate = new();
 
     public static void Write(string message)
@@ -20,7 +20,7 @@ internal static class ProbeLog
             }
             catch
             {
-                // A probe must never take the plugin down over its own logging.
+                // Logging must never take the plugin down.
             }
         }
     }
