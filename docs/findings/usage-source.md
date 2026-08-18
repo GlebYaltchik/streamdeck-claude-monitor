@@ -20,22 +20,43 @@ Unofficial. It is what the Claude Code client itself calls, and it can change wi
 
 ## Credentials
 
-`~/.claude/.credentials.json` holds `claudeAiOauth` with `accessToken`, `refreshToken` and
-`expiresAt` (epoch milliseconds).
+`~/.claude/.credentials.json` holds `claudeAiOauth.accessToken`. That token is read and used
+as found. Nothing else in the file is consulted.
 
-When the access token is expired, refresh it:
+### The token is never refreshed, and that is a safety decision
 
-```
-POST https://platform.claude.com/v1/oauth/token
-{"grant_type":"refresh_token","refresh_token":"...","client_id":"9d1c250a-e61b-44d9-88ed-5944d1962f5e"}
-```
+An earlier version refreshed an expired token against
+`https://platform.claude.com/v1/oauth/token`, the way the client does. **That has been
+removed.**
 
-The client id is the public identifier embedded in the distributed `claude` binary. It
-identifies the client, not the user, and is not a secret.
+OAuth refresh rotates the refresh token server-side: the old one stops working and the caller
+is expected to store the new one. We deliberately never write to the credentials file, because
+it belongs to Claude Code — which means a refresh by us invalidates the token the client is
+holding and gives it nothing back.
 
-**Refreshed tokens are held in memory only.** The agent never rewrites the user's
-credentials file — that file belongs to Claude Code, and racing it risks logging the user
-out of their own client.
+The symptom that prompted this: after a night of the plugin polling, the user's Claude Code
+login in WSL had expired, and the credentials file had been rewritten with **empty** token
+strings and `expiresAt` zeroed. Whether the plugin caused it was never proven, but the shape
+of the risk is one-sided. A plugin that displays a percentage has no business being a
+plausible reason for the tool it reports on to log its user out.
+
+Consequences of not refreshing:
+
+- If the stored token is expired, the request returns 401 and the key shows that a login is
+  needed. Claude Code renews the token during normal use and rewrites the file; the next read
+  picks it up.
+- The stored `expiresAt` is not consulted at all. It was observed to be zero while the file
+  still existed, which would have meant "always expired". The server is the only trustworthy
+  judge of whether a token works.
+
+### An unreadable file is not a login problem
+
+`\wsl.localhost` stops serving when the distribution sleeps, and a process that held a
+working path can keep failing on it after the share returns while a fresh process succeeds.
+That is an outage, not a missing login, and the two must not share a message: one is fixed by
+waiting, the other by the user acting. So a file that cannot be read reports as unavailable
+and keeps showing the last good reading, while only a file that genuinely holds no token — or
+a token the server rejects — asks for a login.
 
 ## Response shape
 
