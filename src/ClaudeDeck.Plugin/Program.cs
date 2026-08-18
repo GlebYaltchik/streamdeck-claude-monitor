@@ -27,13 +27,15 @@ internal static class Program
         await using var hub = new HubServer(new HubOptions { Token = HubToken.ReadOrCreate(PluginLog.Write), Log = PluginLog.Write });
         await using var connection = new StreamDeckConnection(arguments);
 
-        hub.Agents.Changed += () => PluginLog.Write(Describe(hub));
-
         var usageAction = new UsageAction(connection, usage);
+        var summaryAction = new SummaryAction(connection, hub.Agents);
         var actions = new IDeckAction[]
         {
             usageAction,
+            summaryAction,
         }.ToDictionary(action => action.Uuid, StringComparer.Ordinal);
+
+        hub.Agents.Changed += summaryAction.Refresh;
 
         connection.EventReceived += deckEvent =>
             deckEvent.Action is not null && actions.TryGetValue(deckEvent.Action, out var action)
@@ -68,12 +70,6 @@ internal static class Program
 
         PluginLog.Write("stopped");
         return 0;
-    }
-
-    private static string Describe(HubServer hub)
-    {
-        var agents = hub.Agents.Snapshot();
-        return $"agents: {agents.Count}, sessions: {agents.Sum(agent => agent.Sessions.Count)}";
     }
 
     private static async Task RedrawAsync(UsageAction usageAction, CancellationToken cancellationToken)

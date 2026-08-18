@@ -10,12 +10,6 @@ namespace ClaudeDeck.Core.Rendering;
 /// </summary>
 public static class UsageKeyFace
 {
-    private const string Background = "#1b1f24";
-    private const string Track = "#2b313a";
-    private const string Primary = "#ffffff";
-    private const string Muted = "#9aa4b2";
-    private const string Warning = "#c9873a";
-
     public static string Render(UsageSnapshot snapshot, string group, string label, DateTimeOffset now)
     {
         var window = snapshot.Find(group);
@@ -30,11 +24,11 @@ public static class UsageKeyFace
         var footer = stale ? "stale" : Remaining(window.ResetsAt - now);
 
         return new KeyImage()
-            .Background(Background)
-            .Text(label, 28, 19, Muted)
-            .Text($"{window.Percent}%", 86, 50, stale ? Muted : Primary, bold: true)
-            .Bar(window.Percent / 100d, colour, Track, y: 100)
-            .Text(footer, 133, 19, stale ? Warning : Muted)
+            .Background(KeyPalette.Background)
+            .Text(label, 28, 19, KeyPalette.Muted)
+            .Text($"{window.Percent}%", 86, 50, stale ? KeyPalette.Muted : KeyPalette.Primary, bold: true)
+            .Bar(window.Percent / 100d, colour, KeyPalette.Track, y: 100)
+            .Text(footer, 133, 19, stale ? KeyPalette.Warning : KeyPalette.Muted)
             .ToDataUrl();
     }
 
@@ -48,11 +42,11 @@ public static class UsageKeyFace
         };
 
         return new KeyImage()
-            .Background(Background)
-            .Text(label, 28, 19, Muted)
-            .Text("--", 86, 50, "#5c6672", bold: true)
-            .Bar(0, Track, Track, y: 100)
-            .Text(reason, 133, 19, Warning)
+            .Background(KeyPalette.Background)
+            .Text(label, 28, 19, KeyPalette.Muted)
+            .Text("--", 86, 50, KeyPalette.Dim, bold: true)
+            .Bar(0, KeyPalette.Track, KeyPalette.Track, y: 100)
+            .Text(reason, 133, 19, KeyPalette.Warning)
             .ToDataUrl();
     }
 
@@ -72,7 +66,7 @@ public static class UsageKeyFace
                 _ => "no data",
             };
 
-            return new UsageStripFace($"{label} · {reason}", "--", 0, Track);
+            return new UsageStripFace($"{label} · {reason}", "--", 0, KeyPalette.Track);
         }
 
         var suffix = snapshot.Stale ? "stale" : Remaining(window.ResetsAt - now);

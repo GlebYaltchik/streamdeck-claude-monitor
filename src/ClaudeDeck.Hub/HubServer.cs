@@ -116,7 +116,7 @@ public sealed class HubServer : IAsyncDisposable
 
         foreach (var link in _links.Values.Where(link => link.LastMessageAt < deadline))
         {
-            Log($"hub dropping silent agent {link.AgentId}");
+            Log($"hub dropping silent agent {link.Machine}");
             link.Cancel();
         }
     }
@@ -178,7 +178,13 @@ public sealed class HubServer : IAsyncDisposable
             }
             finally
             {
-                _links.TryRemove(connection, out _);
+                // Only a connection that got past the handshake was ever registered, so this
+                // does not log every port scan that reaches the socket.
+                if (_links.TryRemove(connection, out var registered))
+                {
+                    Log($"hub lost agent {registered.Machine}");
+                }
+
                 Agents.Disconnected(connection);
             }
         }
@@ -213,7 +219,7 @@ public sealed class HubServer : IAsyncDisposable
         }
 
         var now = DateTimeOffset.UtcNow;
-        link.AgentId = hello.AgentId;
+        link.Machine = hello.Machine;
         link.Touch(now);
 
         Agents.Connected(connection, new ConnectedAgent
@@ -348,7 +354,8 @@ public sealed class HubServer : IAsyncDisposable
 
         public CancellationToken Token => _cancellation.Token;
 
-        public string AgentId { get; set; } = "unknown";
+        /// <summary>What the logs call this agent. Only set once the handshake succeeded.</summary>
+        public string Machine { get; set; } = "unknown";
 
         public DateTimeOffset LastMessageAt => new(Interlocked.Read(ref _lastMessageTicks), TimeSpan.Zero);
 

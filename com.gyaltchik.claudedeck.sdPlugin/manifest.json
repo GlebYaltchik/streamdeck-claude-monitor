@@ -43,6 +43,21 @@
           "TitleAlignment": "middle"
         }
       ]
+    },
+    {
+      "Name": "Summary",
+      "UUID": "com.gyaltchik.claudedeck.summary",
+      "Icon": "imgs/key",
+      "Tooltip": "How many Claude Code sessions are live, and how many agents report them.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "middle"
+        }
+      ]
     }
   ],
   "UUID": "com.gyaltchik.claudedeck"
