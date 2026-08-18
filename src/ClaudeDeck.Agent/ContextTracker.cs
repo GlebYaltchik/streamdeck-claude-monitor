@@ -76,7 +76,22 @@ internal sealed class ContextTracker(SessionRegistry sessions, Action<string> lo
                 continue;
             }
 
-            if (reader.Read() is { } reading && Moved(session, reading))
+            var reading = reader.Read();
+
+            if (reading is null)
+            {
+                // A compaction drops the reading. Saying nothing would leave the old number
+                // on the key, describing a context that has just been thrown away.
+                if (session.Context is not null)
+                {
+                    sessions.Report(session.Id, null);
+                    changed = true;
+                }
+
+                continue;
+            }
+
+            if (Moved(session, reading))
             {
                 sessions.Report(session.Id, reading);
                 changed = true;

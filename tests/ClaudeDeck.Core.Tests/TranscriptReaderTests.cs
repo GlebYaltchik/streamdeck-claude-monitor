@@ -116,6 +116,25 @@ public class TranscriptReaderTests : IDisposable
         Assert.Null(new TranscriptReader(path).Read());
     }
 
+    /// <summary>
+    /// Captured from a real compaction: it is written into the same transcript the session
+    /// was already using, and no assistant record follows until the next turn. Holding the
+    /// old number would describe a context that has just been thrown away.
+    /// </summary>
+    [Fact]
+    public void A_compaction_drops_the_reading_until_a_new_one_arrives()
+    {
+        var path = Write("compacted.jsonl", Assistant(1, 3_928, 79_076));
+        var reader = new TranscriptReader(path);
+        Assert.Equal(83_005, reader.Read()?.Tokens);
+
+        Append(path, Boundary());
+        Assert.Null(reader.Read());
+
+        Append(path, Assistant(1, 500, 39_499));
+        Assert.Equal(40_000, reader.Read()?.Tokens);
+    }
+
     [Fact]
     public void A_missing_file_is_not_an_error()
     {
@@ -139,6 +158,15 @@ public class TranscriptReaderTests : IDisposable
                     output_tokens = 7,
                 },
             },
+        });
+
+    /// <summary>The shape Claude Code writes, minus the uuids and the preserved segment.</summary>
+    private static string Boundary() =>
+        JsonSerializer.Serialize(new
+        {
+            type = "system",
+            subtype = "compact_boundary",
+            compactMetadata = new { trigger = "manual", preTokens = 42_701 },
         });
 
     private string Write(string name, string content)

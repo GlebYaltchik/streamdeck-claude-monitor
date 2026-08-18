@@ -63,6 +63,32 @@ public class ContextTrackerTests : IDisposable
         Assert.Equal(83_005, sessions.Snapshot().Single().Context?.Tokens);
     }
 
+    /// <summary>
+    /// The real sequence, measured: PreCompact and the SessionStart that follows it both
+    /// name the same transcript, the boundary is written into it, and no assistant record
+    /// arrives until the session's next turn. The key must not keep showing the old fill
+    /// through all of that.
+    /// </summary>
+    [Fact]
+    public void A_compaction_takes_the_context_off_the_session()
+    {
+        var path = Write("session.jsonl", Assistant(1, 3_928, 79_076));
+        var sessions = Started("session-1", path);
+        var tracker = new ContextTracker(sessions, _ => { });
+        Assert.True(tracker.Poll());
+        Assert.NotNull(sessions.Snapshot().Single().Context);
+
+        File.AppendAllText(path, Boundary() + "\n");
+
+        Assert.True(tracker.Poll());
+        var session = sessions.Snapshot().Single();
+        Assert.Null(session.Context);
+
+        // What it is running and where stays true across a compaction.
+        Assert.Equal("claude-opus-5", session.Model);
+        Assert.Equal("main", session.Branch);
+    }
+
     [Fact]
     public void A_session_without_a_transcript_yet_is_skipped()
     {
@@ -88,6 +114,14 @@ public class ContextTrackerTests : IDisposable
                     cache_read_input_tokens = cacheRead,
                 },
             },
+        });
+
+    private static string Boundary() =>
+        JsonSerializer.Serialize(new
+        {
+            type = "system",
+            subtype = "compact_boundary",
+            compactMetadata = new { trigger = "manual", preTokens = 42_701 },
         });
 
     private static SessionRegistry Started(string sessionId, string transcriptPath)

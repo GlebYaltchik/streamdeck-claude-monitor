@@ -57,13 +57,22 @@ public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
     ///
     /// A reading that names no model or branch leaves the known ones alone. Only records
     /// that carry usage produce a reading, and not every one of those repeats the rest.
+    ///
+    /// No reading at all means the context is no longer known — what a compaction leaves
+    /// behind until the next turn. The model and branch survive it; they are still true.
     /// </summary>
-    public void Report(string sessionId, TranscriptReading reading)
+    public void Report(string sessionId, TranscriptReading? reading)
     {
         lock (_gate)
         {
             if (!_sessions.TryGetValue(sessionId, out var session))
             {
+                return;
+            }
+
+            if (reading is null)
+            {
+                _sessions[sessionId] = session with { Context = null };
                 return;
             }
 

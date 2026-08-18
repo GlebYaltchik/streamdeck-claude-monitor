@@ -163,8 +163,20 @@ An unknown model still falls back to 200k and is flagged as an estimate. Falling
 deliberate: understating the window overstates how full the context is, which warns early,
 while the opposite would let a session reach its limit with the key still looking calm.
 
-`PreCompact` marks the exact moment of compaction, so the real auto-compact threshold can be
-calibrated from observation rather than guessed.
+`PreCompact` marks the exact moment of compaction. What a compaction then does to the
+transcript was measured on a real one:
+
+- **The transcript path does not change.** `PreCompact` and the `SessionStart source=compact`
+  that follows both name the same file, and the compaction is written into it.
+- The marker is a `system` record with `subtype: compact_boundary`, carrying
+  `compactMetadata.preTokens` — the size it compacted away — and `trigger`.
+- **No `assistant` record follows until the session's next turn.** The last reading therefore
+  describes a context that no longer exists, so it is dropped at the boundary rather than
+  held. What replaced it is unknown until the next turn says so.
+
+`preTokens` is a better calibration source for the auto-compact threshold than watching the
+running total, but the only compaction observed so far was `trigger: manual`, so the
+automatic threshold is still unmeasured.
 
 ---
 

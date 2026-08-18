@@ -125,8 +125,20 @@ public sealed class TranscriptReader(string path)
         try
         {
             var record = JsonDocument.Parse(line).RootElement;
+            var type = Read(record, "type");
 
-            if (Read(record, "type") != "assistant" ||
+            // Measured on a real compaction: it is written into the same transcript as a
+            // `compact_boundary` record, carrying the size it compacted away, and no
+            // assistant record follows until the session takes its next turn. The reading
+            // held until then describes a context that no longer exists, so it is dropped
+            // rather than shown. What replaced it is unknown until the next turn says so.
+            if (type == "system" && Read(record, "subtype") == "compact_boundary")
+            {
+                Latest = null;
+                return;
+            }
+
+            if (type != "assistant" ||
                 !record.TryGetProperty("message", out var message) ||
                 !message.TryGetProperty("usage", out var usage))
             {
