@@ -3,8 +3,13 @@ using System.Text.Json;
 
 namespace ClaudeDeck.Core.Transcripts;
 
-/// <summary>How full a session's context is, as of the last record that said so.</summary>
-public sealed record ContextReading(int Tokens, string? Model);
+/// <summary>
+/// What the last usable record in a transcript says about the session.
+///
+/// The model and the branch ride along because no hook payload carries either, and they come
+/// out of the same record as the token count.
+/// </summary>
+public sealed record TranscriptReading(int Tokens, string? Model, string? Branch);
 
 /// <summary>
 /// Follows one session's transcript and reports the size of its context.
@@ -25,13 +30,13 @@ public sealed class TranscriptReader(string path)
     public long Offset { get; private set; }
 
     /// <summary>The last reading obtained, kept when a pass brings nothing new.</summary>
-    public ContextReading? Latest { get; private set; }
+    public TranscriptReading? Latest { get; private set; }
 
     /// <summary>
     /// Consumes whatever has been appended since the last call. Returns the newest reading,
     /// which is unchanged when the new records carry no usage.
     /// </summary>
-    public ContextReading? Read()
+    public TranscriptReading? Read()
     {
         try
         {
@@ -138,7 +143,7 @@ public sealed class TranscriptReader(string path)
             // reading.
             if (tokens > 0)
             {
-                Latest = new ContextReading(tokens, Read(message, "model"));
+                Latest = new TranscriptReading(tokens, Read(message, "model"), Read(record, "gitBranch"));
             }
         }
         catch (JsonException)

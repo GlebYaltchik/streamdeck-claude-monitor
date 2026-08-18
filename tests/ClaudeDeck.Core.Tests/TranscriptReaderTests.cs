@@ -19,6 +19,10 @@ public class TranscriptReaderTests : IDisposable
         Assert.NotNull(reading);
         Assert.Equal(83_005, reading.Tokens);
         Assert.Equal("claude-opus-5", reading.Model);
+
+        // Neither the model nor the branch appears in any hook payload; both ride on the
+        // same transcript record as the token count.
+        Assert.Equal("main", reading.Branch);
     }
 
     /// <summary>

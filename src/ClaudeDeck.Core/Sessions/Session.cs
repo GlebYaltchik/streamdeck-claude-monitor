@@ -1,3 +1,5 @@
+using ClaudeDeck.Core.Transcripts;
+
 namespace ClaudeDeck.Core.Sessions;
 
 public enum SessionState
@@ -44,6 +46,15 @@ public sealed record Session
     /// slot of their own.
     /// </summary>
     public int SubagentRuns { get; init; }
+
+    /// <summary>The model in use. From the transcript: no hook payload carries it.</summary>
+    public string? Model { get; init; }
+
+    /// <summary>The git branch, also from the transcript, for a key label.</summary>
+    public string? Branch { get; init; }
+
+    /// <summary>How full the context is, once a transcript has said so.</summary>
+    public ContextFill? Context { get; init; }
 
     /// <summary>The last folder component of the working directory, for a key label.</summary>
     public string? Project => string.IsNullOrEmpty(Cwd) ? null : new DirectoryInfo(Cwd).Name;

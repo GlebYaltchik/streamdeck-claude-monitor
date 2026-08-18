@@ -15,6 +15,10 @@ public sealed record SessionsUpdate(IReadOnlyList<AgentSession> Sessions);
 /// <summary>
 /// A session as it crosses the wire. Deliberately not the agent's own record: the hub is
 /// given what a key has to draw, and gains no opinion about the agent's internals.
+///
+/// The context fields default, so an agent built before they existed still speaks version 1.
+/// Adding a field nobody has to send is not a protocol change; removing or repurposing one
+/// would be.
 /// </summary>
 public sealed record AgentSession(
     string Id,
@@ -24,4 +28,9 @@ public sealed record AgentSession(
     string? PermissionMode,
     string? CurrentTool,
     DateTimeOffset StartedAt,
-    DateTimeOffset LastEventAt);
+    DateTimeOffset LastEventAt,
+    string? Model = null,
+    string? Branch = null,
+    int? ContextTokens = null,
+    int? ContextPercent = null,
+    bool ContextEstimated = false);

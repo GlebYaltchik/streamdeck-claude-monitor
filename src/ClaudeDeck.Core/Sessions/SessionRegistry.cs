@@ -1,3 +1,5 @@
+using ClaudeDeck.Core.Transcripts;
+
 namespace ClaudeDeck.Core.Sessions;
 
 /// <summary>
@@ -46,6 +48,36 @@ public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
 
             var session = _sessions.GetValueOrDefault(hookEvent.SessionId) ?? New(hookEvent);
             _sessions[hookEvent.SessionId] = Advance(session, hookEvent);
+        }
+    }
+
+    /// <summary>
+    /// Attaches what a transcript says about a session. A session that has already ended is
+    /// ignored rather than resurrected: the reader can still be mid-pass when it goes.
+    ///
+    /// A reading that names no model or branch leaves the known ones alone. Only records
+    /// that carry usage produce a reading, and not every one of those repeats the rest.
+    /// </summary>
+    public void Report(string sessionId, TranscriptReading reading)
+    {
+        lock (_gate)
+        {
+            if (!_sessions.TryGetValue(sessionId, out var session))
+            {
+                return;
+            }
+
+            // The window is resolved from the model the session knows, not from whatever
+            // this one reading happened to name. A reading without a model would otherwise
+            // take the 200k fallback and turn a 30% key into 150%.
+            var model = reading.Model ?? session.Model;
+
+            _sessions[sessionId] = session with
+            {
+                Model = model,
+                Branch = reading.Branch ?? session.Branch,
+                Context = ContextFill.Of(reading with { Model = model }),
+            };
         }
     }
 
