@@ -148,10 +148,20 @@ context_tokens = usage.input_tokens
 
 Verified against real data: `1 + 3928 + 79076 = 83,005`.
 
-The denominator is the model's context window, which needs a `model → window` table that
-**parses the `[1m]` suffix**. This is not hypothetical: `claude-opus-5[1m]` appears in real
-tool responses, and treating it as a 200k model would overstate the percentage fivefold. An
-unknown model falls back to 200k and is flagged as an estimate.
+The denominator is the model's context window, from a `model → window` table that also
+**parses the `[1m]` suffix**, which appears in real tool responses and names the window
+outright.
+
+**Correction to an earlier version of this section.** It said a model without the suffix is
+a 200k model, and that reading `claude-opus-5[1m]` as 200k would overstate the percentage
+fivefold. That is backwards for the current line-up, where a million tokens is the rule and
+200k the exception. Measured here: a single request on a plain `claude-opus-5` — no suffix —
+read **638,450** tokens of context, and one on `claude-opus-4-8` read 570,355. Assuming 200k
+would have shown those keys three times past full.
+
+An unknown model still falls back to 200k and is flagged as an estimate. Falling back low is
+deliberate: understating the window overstates how full the context is, which warns early,
+while the opposite would let a session reach its limit with the key still looking calm.
 
 `PreCompact` marks the exact moment of compaction, so the real auto-compact threshold can be
 calibrated from observation rather than guessed.
