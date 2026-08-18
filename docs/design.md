@@ -310,8 +310,13 @@ probe in this reconnaissance. Retained for unusual networking.
 
 **Remote machines (v2)** — `ssh -R`, reusing SSH authentication, nothing exposed.
 
-**Authentication:** a per-agent token presented at handshake, mandatory regardless of bind
-address.
+**Authentication:** a token presented at handshake, mandatory regardless of bind address —
+loopback included, since any local process can reach the port.
+
+The hub owns the token and mints one on first run into `%LOCALAPPDATA%\ClaudeDeck\hub-token`.
+An agent on the same machine reads that file. An agent inside WSL cannot see the Windows
+profile, so it takes the value from `CLAUDEDECK_HUB_TOKEN` instead; handing it over is what
+`claudedeck agent install` will do once it exists.
 
 ---
 

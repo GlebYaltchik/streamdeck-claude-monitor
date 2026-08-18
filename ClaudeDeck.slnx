@@ -2,10 +2,13 @@
   <Folder Name="/src/">
     <Project Path="src/ClaudeDeck.Agent/ClaudeDeck.Agent.csproj" />
     <Project Path="src/ClaudeDeck.Core/ClaudeDeck.Core.csproj" />
+    <Project Path="src/ClaudeDeck.Hub/ClaudeDeck.Hub.csproj" />
     <Project Path="src/ClaudeDeck.Plugin/ClaudeDeck.Plugin.csproj" />
+    <Project Path="src/ClaudeDeck.Protocol/ClaudeDeck.Protocol.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ClaudeDeck.Agent.Tests/ClaudeDeck.Agent.Tests.csproj" />
     <Project Path="tests/ClaudeDeck.Core.Tests/ClaudeDeck.Core.Tests.csproj" />
+    <Project Path="tests/ClaudeDeck.Hub.Tests/ClaudeDeck.Hub.Tests.csproj" />
   </Folder>
 </Solution>

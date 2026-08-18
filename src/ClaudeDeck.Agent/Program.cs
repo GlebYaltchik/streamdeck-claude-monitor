@@ -1,10 +1,14 @@
 using System.Text.Json;
 using ClaudeDeck.Agent;
 using ClaudeDeck.Core.Sessions;
+using ClaudeDeck.Protocol;
 
 // The agent listens for Claude Code hook events on loopback, records them, and keeps the
 // current state of every live session. It decides nothing: every response is empty, so a
 // session behaves exactly as it would without it.
+//
+// It also reports those sessions to the hub inside the plugin, and keeps working the same
+// way when the hub is not there.
 
 const int DefaultPort = 17800;
 
@@ -15,6 +19,7 @@ var port = Environment.GetEnvironmentVariable("CLAUDEDECK_AGENT_PORT") is { } co
 
 var events = new EventLog();
 var sessions = new SessionRegistry();
+var hub = new HubClient(sessions, HubToken.Read(), Console.WriteLine);
 
 var builder = WebApplication.CreateSlimBuilder(args);
 builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
@@ -60,7 +65,12 @@ app.MapPost("/hook/{hookEvent}", async (string hookEvent, HttpRequest request) =
 Console.WriteLine($"ClaudeDeck agent on http://127.0.0.1:{port}");
 Console.WriteLine($"recording to {events.Path}");
 
+using var stopping = new CancellationTokenSource();
+app.Lifetime.ApplicationStopping.Register(stopping.Cancel);
+var reporting = hub.RunAsync(stopping.Token);
+
 app.Run();
+await reporting;
 return;
 
 void Track(string name, string payload)
@@ -71,6 +81,7 @@ void Track(string name, string payload)
         if (HookEvent.Parse(name, document.RootElement, DateTimeOffset.UtcNow) is { } parsed)
         {
             sessions.Apply(parsed);
+            hub.Publish();
         }
     }
     catch (JsonException)

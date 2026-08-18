@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ClaudeDeck.Core\ClaudeDeck.Core.csproj" />
+    <ProjectReference Include="..\ClaudeDeck.Hub\ClaudeDeck.Hub.csproj" />
   </ItemGroup>
 
 </Project>

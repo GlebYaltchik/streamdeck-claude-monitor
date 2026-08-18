@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Portable: the same contract is compiled into the Windows plugin and into an agent
+         running inside a WSL distribution. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ClaudeDeck.Protocol</RootNamespace>
+  </PropertyGroup>
+
+</Project>

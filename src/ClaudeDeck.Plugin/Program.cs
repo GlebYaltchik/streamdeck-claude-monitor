@@ -1,4 +1,6 @@
+using ClaudeDeck.Hub;
 using ClaudeDeck.Plugin.Actions;
+using ClaudeDeck.Protocol;
 
 namespace ClaudeDeck.Plugin;
 
@@ -22,7 +24,10 @@ internal static class Program
         PluginLog.Write($"starting on port {arguments.Port}");
 
         using var usage = new UsageService();
+        await using var hub = new HubServer(new HubOptions { Token = HubToken.ReadOrCreate(PluginLog.Write), Log = PluginLog.Write });
         await using var connection = new StreamDeckConnection(arguments);
+
+        hub.Agents.Changed += () => PluginLog.Write(Describe(hub));
 
         var usageAction = new UsageAction(connection, usage);
         var actions = new IDeckAction[]
@@ -43,6 +48,7 @@ internal static class Program
         };
 
         var redrawing = RedrawAsync(usageAction, shutdown.Token);
+        var serving = hub.RunAsync(shutdown.Token);
 
         try
         {
@@ -57,10 +63,17 @@ internal static class Program
         {
             await shutdown.CancelAsync();
             await redrawing;
+            await serving;
         }
 
         PluginLog.Write("stopped");
         return 0;
+    }
+
+    private static string Describe(HubServer hub)
+    {
+        var agents = hub.Agents.Snapshot();
+        return $"agents: {agents.Count}, sessions: {agents.Sum(agent => agent.Sessions.Count)}";
     }
 
     private static async Task RedrawAsync(UsageAction usageAction, CancellationToken cancellationToken)
