@@ -1,0 +1,101 @@
+namespace ClaudeDeck.Core.Sessions;
+
+/// <summary>
+/// Turns a stream of hook events into the current state of every live session.
+///
+/// The transitions are design §4.1, and three of them exist because Phase 0 measured
+/// behaviour that was not obvious:
+///
+/// - a compaction emits a second <c>SessionStart</c> with the same session id, so it
+///   continues a session instead of starting one;
+/// - <c>SubagentStop</c> belongs to its parent session and never creates one;
+/// - <c>Notification</c> is not handled at all, because it does not fire for permission
+///   prompts, which is the only thing it would have been used for.
+/// </summary>
+public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
+{
+    private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
+    private readonly Func<DateTimeOffset> _clock = clock ?? (() => DateTimeOffset.UtcNow);
+    private readonly Lock _gate = new();
+
+    public IReadOnlyList<Session> Snapshot()
+    {
+        lock (_gate)
+        {
+            return [.. _sessions.Values.OrderBy(session => session.StartedAt)];
+        }
+    }
+
+    public Session? Find(string sessionId)
+    {
+        lock (_gate)
+        {
+            return _sessions.GetValueOrDefault(sessionId);
+        }
+    }
+
+    public void Apply(HookEvent hookEvent)
+    {
+        lock (_gate)
+        {
+            if (hookEvent.Name == "SessionEnd")
+            {
+                _sessions.Remove(hookEvent.SessionId);
+                return;
+            }
+
+            var session = _sessions.GetValueOrDefault(hookEvent.SessionId) ?? New(hookEvent);
+            _sessions[hookEvent.SessionId] = Advance(session, hookEvent);
+        }
+    }
+
+    /// <summary>Drops sessions whose id is not in the given set, used after a rescan.</summary>
+    public void RetainOnly(IReadOnlySet<string> sessionIds)
+    {
+        lock (_gate)
+        {
+            foreach (var id in _sessions.Keys.Where(id => !sessionIds.Contains(id)).ToList())
+            {
+                _sessions.Remove(id);
+            }
+        }
+    }
+
+    private Session New(HookEvent hookEvent) => new()
+    {
+        Id = hookEvent.SessionId,
+        State = SessionState.Idle,
+        StartedAt = hookEvent.ReceivedAt,
+        LastEventAt = hookEvent.ReceivedAt,
+    };
+
+    private static Session Advance(Session session, HookEvent hookEvent)
+    {
+        var updated = session with
+        {
+            LastEventAt = hookEvent.ReceivedAt,
+            Cwd = hookEvent.Cwd ?? session.Cwd,
+            TranscriptPath = hookEvent.TranscriptPath ?? session.TranscriptPath,
+            PermissionMode = hookEvent.PermissionMode ?? session.PermissionMode,
+        };
+
+        return hookEvent.Name switch
+        {
+            // A compaction keeps the session and whatever it was doing.
+            "SessionStart" when hookEvent.Source == HookEvent.CompactSource => updated,
+            "SessionStart" => updated with { State = SessionState.Idle, CurrentTool = null },
+
+            "UserPromptSubmit" => updated with { State = SessionState.Working },
+            "PreToolUse" => updated with { State = SessionState.Working, CurrentTool = hookEvent.ToolName },
+            "PostToolUse" => updated with { State = SessionState.Working, CurrentTool = null },
+
+            // The turn is over, which is exactly "waiting for the user".
+            "Stop" => updated with { State = SessionState.Idle, CurrentTool = null },
+
+            "PreCompact" => updated with { State = SessionState.Compacting },
+            "SubagentStop" => updated with { SubagentRuns = session.SubagentRuns + 1 },
+
+            _ => updated,
+        };
+    }
+}
