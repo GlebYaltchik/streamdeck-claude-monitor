@@ -83,6 +83,7 @@ public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
 
             _sessions[sessionId] = session with
             {
+                Title = reading.Title ?? session.Title,
                 Model = model,
                 Branch = reading.Branch ?? session.Branch,
                 Context = ContextFill.Of(reading with { Model = model }),

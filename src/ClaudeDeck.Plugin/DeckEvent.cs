@@ -12,6 +12,7 @@ internal sealed record DeckEvent(
     string? Action,
     string? Device,
     string? Controller,
+    DeckCoordinates? Coordinates,
     JsonElement Payload)
 {
     public static DeckEvent Parse(JsonElement message)
@@ -24,6 +25,7 @@ internal sealed record DeckEvent(
             Action: ReadString(message, "action"),
             Device: ReadString(message, "device"),
             Controller: payload.ValueKind == JsonValueKind.Object ? ReadString(payload, "controller") : null,
+            Coordinates: DeckCoordinates.Parse(payload),
             Payload: payload);
     }
 
@@ -33,6 +35,28 @@ internal sealed record DeckEvent(
     {
         return element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value)
             ? value.GetString()
+            : null;
+    }
+}
+
+/// <summary>
+/// Where a key sits on its device. Stream Deck sends this with every appearance, which is
+/// what lets session slots be ordered without the user configuring a number per key.
+/// </summary>
+internal sealed record DeckCoordinates(int Column, int Row)
+{
+    public static DeckCoordinates? Parse(JsonElement payload)
+    {
+        if (payload.ValueKind != JsonValueKind.Object ||
+            !payload.TryGetProperty("coordinates", out var coordinates) ||
+            coordinates.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return coordinates.TryGetProperty("column", out var column) && column.TryGetInt32(out var x) &&
+               coordinates.TryGetProperty("row", out var row) && row.TryGetInt32(out var y)
+            ? new DeckCoordinates(x, y)
             : null;
     }
 }

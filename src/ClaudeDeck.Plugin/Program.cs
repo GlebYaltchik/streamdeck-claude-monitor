@@ -29,13 +29,16 @@ internal static class Program
 
         var usageAction = new UsageAction(connection, usage);
         var summaryAction = new SummaryAction(connection, hub.Agents);
+        var sessionAction = new SessionAction(connection, hub.Agents);
         var actions = new IDeckAction[]
         {
             usageAction,
             summaryAction,
+            sessionAction,
         }.ToDictionary(action => action.Uuid, StringComparer.Ordinal);
 
         hub.Agents.Changed += summaryAction.Refresh;
+        hub.Agents.Changed += sessionAction.Refresh;
 
         connection.EventReceived += deckEvent =>
             deckEvent.Action is not null && actions.TryGetValue(deckEvent.Action, out var action)

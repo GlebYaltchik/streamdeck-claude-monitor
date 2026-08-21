@@ -108,7 +108,8 @@ internal sealed class ContextTracker(SessionRegistry sessions, Action<string> lo
     /// </summary>
     private static bool Moved(Session session, TranscriptReading reading) =>
         session.Context?.Tokens != reading.Tokens ||
-        (reading.Model is not null && session.Model != reading.Model);
+        (reading.Model is not null && session.Model != reading.Model) ||
+        (reading.Title is not null && session.Title != reading.Title);
 
     private TranscriptReader Reader(string sessionId, string path)
     {

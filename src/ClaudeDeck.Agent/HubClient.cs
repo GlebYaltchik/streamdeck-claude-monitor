@@ -160,6 +160,7 @@ internal sealed class HubClient(SessionRegistry sessions, string? token, Action<
             session.CurrentTool,
             session.StartedAt,
             session.LastEventAt,
+            session.Title,
             session.Model,
             session.Branch,
             session.Context?.Tokens,

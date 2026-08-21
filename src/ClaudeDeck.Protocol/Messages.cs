@@ -29,6 +29,7 @@ public sealed record AgentSession(
     string? CurrentTool,
     DateTimeOffset StartedAt,
     DateTimeOffset LastEventAt,
+    string? Title = null,
     string? Model = null,
     string? Branch = null,
     int? ContextTokens = null,

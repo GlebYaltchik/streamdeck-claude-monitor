@@ -47,6 +47,12 @@ public sealed record Session
     /// </summary>
     public int SubagentRuns { get; init; }
 
+    /// <summary>
+    /// What the session is called. From the transcript, and the only thing that tells two
+    /// sessions in the same repository apart on a key.
+    /// </summary>
+    public string? Title { get; init; }
+
     /// <summary>The model in use. From the transcript: no hook payload carries it.</summary>
     public string? Model { get; init; }
 

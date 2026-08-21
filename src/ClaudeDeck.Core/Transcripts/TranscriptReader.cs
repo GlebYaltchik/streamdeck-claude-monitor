@@ -7,9 +7,10 @@ namespace ClaudeDeck.Core.Transcripts;
 /// What the last usable record in a transcript says about the session.
 ///
 /// The model and the branch ride along because no hook payload carries either, and they come
-/// out of the same record as the token count.
+/// out of the same record as the token count. The title comes from its own record and is what
+/// tells two sessions in the same repository apart.
 /// </summary>
-public sealed record TranscriptReading(int Tokens, string? Model, string? Branch);
+public sealed record TranscriptReading(int Tokens, string? Model, string? Branch, string? Title = null);
 
 /// <summary>
 /// Follows one session's transcript and reports the size of its context.
@@ -29,8 +30,15 @@ public sealed class TranscriptReader(string path)
     /// <summary>Where the next pass starts. Exposed so a test can prove nothing is re-read.</summary>
     public long Offset { get; private set; }
 
-    /// <summary>The last reading obtained, kept when a pass brings nothing new.</summary>
-    public TranscriptReading? Latest { get; private set; }
+    /// <summary>
+    /// The last reading obtained, kept when a pass brings nothing new. The title is tracked
+    /// separately because it arrives in its own records, and survives a compaction: the
+    /// session is renamed by neither.
+    /// </summary>
+    public TranscriptReading? Latest => _usage is null ? null : _usage with { Title = _title };
+
+    private TranscriptReading? _usage;
+    private string? _title;
 
     /// <summary>
     /// Consumes whatever has been appended since the last call. Returns the newest reading,
@@ -74,7 +82,8 @@ public sealed class TranscriptReader(string path)
     private void Reset()
     {
         Offset = 0;
-        Latest = null;
+        _usage = null;
+        _title = null;
     }
 
     /// <summary>
@@ -134,7 +143,15 @@ public sealed class TranscriptReader(string path)
             // rather than shown. What replaced it is unknown until the next turn says so.
             if (type == "system" && Read(record, "subtype") == "compact_boundary")
             {
-                Latest = null;
+                _usage = null;
+                return;
+            }
+
+            // Two record types name a session: the one the user set and the one Claude wrote.
+            // Whichever came last is its current name.
+            if ((Read(record, "customTitle") ?? Read(record, "aiTitle")) is { Length: > 0 } title)
+            {
+                _title = title;
                 return;
             }
 
@@ -155,7 +172,7 @@ public sealed class TranscriptReader(string path)
             // reading.
             if (tokens > 0)
             {
-                Latest = new TranscriptReading(tokens, Read(message, "model"), Read(record, "gitBranch"));
+                _usage = new TranscriptReading(tokens, Read(message, "model"), Read(record, "gitBranch"));
             }
         }
         catch (JsonException)

@@ -375,9 +375,18 @@ about 4 Hz with a dirty flag per key.
 | 5 | Plugin mode | Off → Observe → Active | — |
 | 6 | Spare | | |
 
-**Keys:** 6–8 session slots (colour by state, ring by context, label project and branch), an
-approval block (**Allow / Allow always / Deny**, plus "leave it to the terminal"), an alert mute,
-and a usage summary.
+**Keys:** 6–8 session slots (background by state, bar by context fill, labelled with the
+session's own name), an approval block (**Allow / Allow always / Deny**, plus "leave it to the
+terminal"), an alert mute, and a usage summary.
+
+The slot face was settled on the device, and two earlier versions were rejected there. A
+context ring with text inside it crowded out the text. Labelling by project and branch drew
+three sessions from one repository identically — `streamdeck-c…` over `main`, three times —
+so the label is the session's title, which is the only field that differs. State was the
+colour of the context bar until a session at one percent, and one whose context was unknown,
+turned out to have almost no coloured pixels to read it from; state moved to the background,
+which is there whatever the numbers say, and the bar was freed to show how full is worth
+reacting to.
 
 **Slots are dynamic but sticky.** A session takes the lowest free slot on first sight and holds
 it until it ends; a freed slot goes only to a new session. No reordering by activity — keys that

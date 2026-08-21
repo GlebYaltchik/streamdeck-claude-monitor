@@ -43,6 +43,7 @@ app.MapGet("/sessions", () => Results.Ok(sessions.Snapshot().Select(session => n
     subagentRuns = session.SubagentRuns,
     startedAt = session.StartedAt,
     lastEventAt = session.LastEventAt,
+    title = session.Title,
     model = session.Model,
     branch = session.Branch,
     contextTokens = session.Context?.Tokens,
