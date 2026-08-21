@@ -28,6 +28,8 @@ internal sealed class StreamDeckConnection : IDeckConnection, IAsyncDisposable
 
     public void Update(string context, DeckUpdate update) => _updates.Submit(context, update);
 
+    public Task AnimateAsync(string context, DeckUpdate update) => SendUpdateAsync(context, update);
+
     public void Forget(string context) => _updates.Forget(context);
 
     public Task SaveSettingsAsync(string context, object settings) =>

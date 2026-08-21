@@ -53,6 +53,13 @@ public sealed record Session
     /// </summary>
     public string? Title { get; init; }
 
+    /// <summary>
+    /// The model finished a turn and it is the user's move. Narrower than <c>Idle</c>, which
+    /// a session also sits in from the moment it starts: this is set only by <c>Stop</c>, so
+    /// it means something happened that somebody should look at.
+    /// </summary>
+    public bool AwaitingUser { get; init; }
+
     /// <summary>The model in use. From the transcript: no hook payload carries it.</summary>
     public string? Model { get; init; }
 

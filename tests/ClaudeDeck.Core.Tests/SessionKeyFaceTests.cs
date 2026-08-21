@@ -130,6 +130,57 @@ public class SessionKeyFaceTests
         Assert.Equal(Bar(working), Bar(waiting));
     }
 
+    /// <summary>
+    /// The swell has to be visible at the edge of vision, and nothing but the background may
+    /// move: a slot that rearranges itself while swelling cannot be read at a glance.
+    /// </summary>
+    [Fact]
+    public void A_slot_asking_for_attention_only_changes_its_background()
+    {
+        var session = new SessionSlotFace(SessionState.Idle, "Claudedeck", null, 40, false);
+
+        var resting = Decode(SessionKeyFace.Render(session));
+        var swollen = Decode(SessionKeyFace.Render(session, 1));
+
+        Assert.NotEqual(resting, swollen);
+        Assert.Contains(">Claudedeck<", swollen);
+        Assert.Contains(">40%<", swollen);
+        Assert.Equal(WithoutBackground(resting), WithoutBackground(swollen));
+    }
+
+    /// <summary>
+    /// A slot at rest must be the face it always was, byte for byte: an unchanged face is
+    /// never resent, and every frame that goes out costs a message.
+    /// </summary>
+    [Fact]
+    public void A_slot_at_rest_is_the_face_it_always_was()
+    {
+        var session = new SessionSlotFace(SessionState.Working, "Claudedeck", null, 40, false);
+
+        Assert.Equal(SessionKeyFace.Render(session), SessionKeyFace.Render(session, 0));
+    }
+
+    [Fact]
+    public void The_swell_passes_through_the_shades_between()
+    {
+        var session = new SessionSlotFace(SessionState.Idle, "Claudedeck", null, 40, false);
+
+        var shades = new[] { 0, 0.25, 0.5, 0.75, 1 }
+            .Select(glow => Decode(SessionKeyFace.Render(session, glow)))
+            .ToList();
+
+        Assert.Equal(5, shades.Distinct().Count());
+    }
+
+    /// <summary>The face with its background rectangle, the first one drawn, taken out.</summary>
+    private static string WithoutBackground(string svg)
+    {
+        var start = svg.IndexOf("<rect", StringComparison.Ordinal);
+        var end = svg.IndexOf("/>", start, StringComparison.Ordinal) + 2;
+
+        return svg.Remove(start, end - start);
+    }
+
     [Fact]
     public void An_empty_slot_carries_no_name_and_no_bar()
     {

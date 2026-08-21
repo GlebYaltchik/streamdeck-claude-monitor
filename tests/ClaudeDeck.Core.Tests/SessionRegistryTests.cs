@@ -119,6 +119,48 @@ public class SessionRegistryTests
     }
 
     /// <summary>
+    /// The signal a flashing key rests on. Narrower than Idle, which a session also sits in
+    /// from the moment it starts — nobody needs to be called over to a session that has done
+    /// nothing yet.
+    /// </summary>
+    [Fact]
+    public void The_end_of_a_turn_is_what_asks_for_the_user()
+    {
+        var registry = new SessionRegistry();
+        registry.Apply(Event("SessionStart", source: "startup"));
+        Assert.False(Only(registry).AwaitingUser);
+
+        registry.Apply(Event("UserPromptSubmit"));
+        Assert.False(Only(registry).AwaitingUser);
+
+        registry.Apply(Event("Stop"));
+        Assert.True(Only(registry).AwaitingUser);
+    }
+
+    [Fact]
+    public void Going_back_to_a_session_stops_it_asking()
+    {
+        var registry = Started();
+        registry.Apply(Event("Stop"));
+
+        registry.Apply(Event("UserPromptSubmit"));
+
+        Assert.False(Only(registry).AwaitingUser);
+    }
+
+    /// <summary>A turn that ended two hours ago is no longer news worth flashing about.</summary>
+    [Fact]
+    public void A_session_that_goes_stale_stops_asking()
+    {
+        var registry = Started();
+        registry.Apply(Event("Stop"));
+
+        registry.MarkStale("session-1");
+
+        Assert.False(Only(registry).AwaitingUser);
+    }
+
+    /// <summary>
     /// Stale is a reading, not a verdict. With no process id to ask, it rests on silence
     /// alone, and a session sitting untouched in an open terminal is indistinguishable from
     /// one whose terminal is gone until it speaks.

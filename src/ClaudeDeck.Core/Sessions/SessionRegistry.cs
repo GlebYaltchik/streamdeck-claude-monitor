@@ -101,7 +101,8 @@ public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
         {
             if (_sessions.TryGetValue(sessionId, out var session))
             {
-                _sessions[sessionId] = session with { State = SessionState.Stale };
+                // A turn that ended two hours ago is no longer news worth flashing about.
+                _sessions[sessionId] = session with { State = SessionState.Stale, AwaitingUser = false };
             }
         }
     }
@@ -147,6 +148,10 @@ public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
             // only stale until it speaks again, and most of the transitions below overwrite
             // this anyway.
             State = session.State == SessionState.Stale ? SessionState.Idle : session.State,
+
+            // Anything happening means the turn is no longer sitting finished and unread.
+            // Only Stop below sets this, so it survives exactly one event.
+            AwaitingUser = false,
             LastEventAt = hookEvent.ReceivedAt,
             Cwd = hookEvent.Cwd ?? session.Cwd,
             TranscriptPath = hookEvent.TranscriptPath ?? session.TranscriptPath,
@@ -164,7 +169,7 @@ public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
             "PostToolUse" => updated with { State = SessionState.Working, CurrentTool = null },
 
             // The turn is over, which is exactly "waiting for the user".
-            "Stop" => updated with { State = SessionState.Idle, CurrentTool = null },
+            "Stop" => updated with { State = SessionState.Idle, CurrentTool = null, AwaitingUser = true },
 
             "PreCompact" => updated with { State = SessionState.Compacting },
             "SubagentStop" => updated with { SubagentRuns = session.SubagentRuns + 1 },

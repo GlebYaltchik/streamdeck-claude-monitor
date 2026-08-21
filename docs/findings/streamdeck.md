@@ -54,6 +54,29 @@ Design §8 budgets updates at about 4 Hz with a dirty flag per key. This measure
 from a precaution into a requirement: a single fast spin will otherwise saturate the
 connection, and the same applies to any state that changes rapidly.
 
+## `setImage` does not animate
+
+Measured while looking for a way to make a slot ask for attention without redrawing it.
+
+- **An animated SVG is rasterized once.** A background carrying both a SMIL `<animate>` and a
+  CSS `@keyframes` — verified to run in a browser — sat still on the device.
+- **An animated GIF is shown as a still.** A two-frame 144x144 GIF was hand-built, verified
+  frame by frame with a decoder written for the purpose, delivered through `setImage`, and
+  appeared on the key as one unchanging square.
+
+Animated key images do work when they are set through the Stream Deck application's own
+interface, where the application decodes and drives them. That is not the same path as a
+plugin's `setImage`, and it is not available to us.
+
+**So movement on a key costs one message per frame.** The 4 Hz figure in design §8 is a budget
+taken from that document, not a measured ceiling: the 116-event measurement below is about
+answering an input flood, not about how fast one key can be pushed. What a single animating
+key can sustain is still unmeasured.
+
+**There is a title layer.** `setTitle` draws text over the image, and the manifest sets its
+font, size and colour per state. An earlier claim here that a key is one picture with no text
+layer was wrong.
+
 ## Revision: drop the SDK library
 
 Design §9 planned to start on BarRaider's StreamDeck-Tools with all SDK contact isolated

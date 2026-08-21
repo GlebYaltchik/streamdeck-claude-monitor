@@ -60,6 +60,7 @@ app.MapGet("/sessions", () => Results.Ok(sessions.Snapshot().Select(session => n
     contextWindow = session.Context?.Window,
     contextPercent = session.Context?.Percent,
     contextEstimated = session.Context?.Estimated,
+    awaitingUser = session.AwaitingUser,
 })));
 
 app.MapPost("/hook/{hookEvent}", async (string hookEvent, HttpRequest request) =>

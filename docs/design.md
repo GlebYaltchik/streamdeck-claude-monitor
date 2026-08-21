@@ -117,7 +117,15 @@ Confirmed against real payloads ([findings/hooks.md](findings/hooks.md)).
 | `PreCompact` | → `Compacting` |
 | `SessionEnd` | → remove from the registry |
 
-Key states: **Idle / Working / WaitingInput / WaitingApproval / Compacting / Stale / Error**.
+Key states: **Idle / Working / WaitingApproval / Compacting / Stale**.
+
+**Correction.** An earlier version of this list also carried `WaitingInput` and `Error`.
+Neither was ever built, and `WaitingInput` had nothing to set it: the state it describes is
+the end of a turn, which the table above already sends to `Idle`. What a key needs from it is
+narrower than a state anyway — a session is in `Idle` from the moment it starts, and nobody
+should be called over to a session that has done nothing yet. So the end of a turn sets a flag
+of its own, `AwaitingUser`, cleared by the session's next event of any kind. That is what a
+slot asks for attention about, and `WaitingApproval` will join it when §6 exists.
 
 Three things the payloads settled:
 
@@ -377,6 +385,11 @@ the protocol; only `type: 13` identifies the device.
 **Coalescing is required.** One dial spin produced 116 events in seconds. Updates are capped at
 about 4 Hz with a dirty flag per key.
 
+That cap bounds what an *input flood* can cost, and it is not a measured ceiling on how fast
+one key can be pushed. Animation frames therefore go out on their own lane, past the cap: a
+slot asking for attention is redrawn about twelve times a second. Holding those frames back
+behind the cap is what made the first attempt look stuttered.
+
 ### Recommended profile
 
 | Encoder | Action | Rotate | Press |
@@ -413,6 +426,17 @@ This is the first message the hub sends an agent after the handshake, and it is 
 hub finds the agent that reported the session and tells only that one, which matters as soon as
 there are two machines. The protocol version stays 1 — a receiver already ignores message types
 it does not know.
+
+**A slot asking to be looked at swells and fades**, and one key mutes every one of them. The
+swell is sent frame by frame because the device offers nothing else: an animated SVG is
+rasterized once and an animated GIF is shown as a still, both measured on the hardware
+([findings/streamdeck.md](findings/streamdeck.md)). Each frame is timed from the clock rather
+than counted, so a late frame costs one skipped value instead of stretching the breath.
+
+Muting changes no session. It stops the deck asking; everything still waiting is still waiting
+when it comes off, and the mute key keeps showing how many that is — a mute that hides how much
+it suppresses is one people stop trusting. A tap on a slot silences that one alone, and is
+forgotten as soon as the session stops waiting, so the end of its next turn asks again.
 
 **Slots are dynamic but sticky.** A session takes the lowest free slot on first sight and holds
 it until it ends; a freed slot goes only to a new session. No reordering by activity — keys that

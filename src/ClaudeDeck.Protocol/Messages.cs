@@ -42,4 +42,5 @@ public sealed record AgentSession(
     string? Branch = null,
     int? ContextTokens = null,
     int? ContextPercent = null,
-    bool ContextEstimated = false);
+    bool ContextEstimated = false,
+    bool AwaitingUser = false);

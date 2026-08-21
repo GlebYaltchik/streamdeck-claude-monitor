@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using ClaudeDeck.Core.Rendering;
 using ClaudeDeck.Core.Sessions;
 using ClaudeDeck.Hub;
@@ -26,6 +27,7 @@ namespace ClaudeDeck.Plugin.Actions;
 internal sealed class SessionAction(
     IDeckConnection connection,
     AgentRegistry agents,
+    Alerts alerts,
     Func<string, Task<bool>> forgetSession) : IDeckAction
 {
     /// <summary>
@@ -42,8 +44,23 @@ internal sealed class SessionAction(
     /// <summary>Which session each key is currently showing, so a press knows what it is on.</summary>
     private readonly Dictionary<string, string> _showing = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// The last face sent to each key. The hub reports on every tool call, and sending a
+    /// picture identical to the one already there is traffic for nothing — and, now that a
+    /// waiting slot animates itself, would restart its swell from the beginning each time.
+    /// </summary>
+    private readonly Dictionary<string, string> _drawn = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Where the swell is up to. One clock for every key, so slots asking together breathe
+    /// together rather than each on its own phase.
+    /// </summary>
+    private readonly Stopwatch _breathing = Stopwatch.StartNew();
+
     private readonly SessionSlots _slots = new();
     private readonly Lock _gate = new();
+
+    private bool _anyAlerting;
 
     public string Uuid => "com.gyaltchik.claudedeck.session";
 
@@ -70,7 +87,13 @@ internal sealed class SessionAction(
                 break;
 
             case "keyUp":
-                AbandonHold(deckEvent.Context);
+                // A hold still counting down means the key was let go too early, which is a
+                // tap. One that has already fired left nothing to abandon.
+                if (AbandonHold(deckEvent.Context))
+                {
+                    Tapped(deckEvent.Context);
+                }
+
                 break;
 
             case "willDisappear":
@@ -79,6 +102,7 @@ internal sealed class SessionAction(
                 lock (_gate)
                 {
                     _keys.Remove(deckEvent.Context);
+                    _drawn.Remove(deckEvent.Context);
                 }
 
                 connection.Forget(deckEvent.Context);
@@ -103,19 +127,42 @@ internal sealed class SessionAction(
         _ = HeldAsync(context, hold);
     }
 
-    private void AbandonHold(string context)
+    /// <summary>Returns whether there was a hold still running to abandon.</summary>
+    private bool AbandonHold(string context)
     {
         lock (_gate)
         {
-            AbandonLocked(context);
+            return AbandonLocked(context);
         }
     }
 
-    private void AbandonLocked(string context)
+    /// <summary>
+    /// A tap: stops this slot flashing. The session is not touched — the deck has stopped
+    /// asking, which is all a tap can honestly mean.
+    /// </summary>
+    private void Tapped(string context)
+    {
+        string? sessionId;
+
+        lock (_gate)
+        {
+            sessionId = _showing.GetValueOrDefault(context);
+        }
+
+        if (sessionId is null)
+        {
+            return;
+        }
+
+        alerts.Acknowledge(sessionId);
+        Refresh();
+    }
+
+    private bool AbandonLocked(string context)
     {
         if (!_holds.Remove(context, out var hold))
         {
-            return;
+            return false;
         }
 
         try
@@ -127,7 +174,10 @@ internal sealed class SessionAction(
             // The hold completed on its own between being taken from the dictionary and
             // being cancelled, which is the outcome that was wanted anyway.
         }
+
+        return true;
     }
+
 
     /// <summary>
     /// Waits out the hold and, if the key is still down, clears the session on it. Holding an
@@ -195,9 +245,25 @@ internal sealed class SessionAction(
             bySlot[placed[session.Id]] = session;
         }
 
+        alerts.Settle(sessions.Where(session => session.AwaitingUser).Select(session => session.Id));
+
+        var alerting = false;
+
         foreach (var (context, slot) in Slots())
         {
             var live = bySlot.TryGetValue(slot, out var session);
+            string face;
+
+            if (live)
+            {
+                var lit = alerts.Alerting(session!.Id, session.AwaitingUser);
+                alerting |= lit;
+                face = SessionKeyFace.Render(Describe(session), lit ? SlotPulse.Glow(Elapsed()) : 0);
+            }
+            else
+            {
+                face = SessionKeyFace.Empty();
+            }
 
             lock (_gate)
             {
@@ -209,13 +275,74 @@ internal sealed class SessionAction(
                 {
                     _showing.Remove(context);
                 }
-            }
 
-            var face = live ? SessionKeyFace.Render(Describe(session!)) : SessionKeyFace.Empty();
+                if (_drawn.TryGetValue(context, out var already) && already == face)
+                {
+                    continue;
+                }
+
+                _drawn[context] = face;
+            }
 
             connection.Update(context, new ImageUpdate(face));
         }
+
+        _anyAlerting = alerting;
     }
+
+    /// <summary>
+    /// Sends the next frame of the swell, straight out rather than through the rate limit.
+    /// Costs nothing while no slot is asking for attention, which is almost always.
+    /// </summary>
+    public async Task PulseAsync()
+    {
+        if (!_anyAlerting)
+        {
+            return;
+        }
+
+        var glow = SlotPulse.Glow(Elapsed());
+
+        foreach (var (context, face) in Alerting(glow))
+        {
+            lock (_gate)
+            {
+                _drawn[context] = face;
+            }
+
+            await connection.AnimateAsync(context, new ImageUpdate(face));
+        }
+    }
+
+    /// <summary>The face each swelling key should be showing at this point in the breath.</summary>
+    private List<(string Context, string Face)> Alerting(double glow)
+    {
+        var bySession = agents.Snapshot()
+            .SelectMany(agent => agent.Sessions)
+            .ToDictionary(session => session.Id, StringComparer.Ordinal);
+
+        List<(string, string)> frames = [];
+
+        lock (_gate)
+        {
+            foreach (var (context, sessionId) in _showing)
+            {
+                if (bySession.TryGetValue(sessionId, out var session) &&
+                    alerts.Alerting(sessionId, session.AwaitingUser))
+                {
+                    frames.Add((context, SessionKeyFace.Render(Describe(session), glow)));
+                }
+            }
+        }
+
+        return frames;
+    }
+
+    private TimeSpan Elapsed() => _breathing.Elapsed;
+
+    /// <summary>How many sessions are waiting to be looked at, muted or not.</summary>
+    public int Waiting() =>
+        agents.Snapshot().SelectMany(agent => agent.Sessions).Count(session => session.AwaitingUser);
 
     /// <summary>
     /// Each visible key paired with the slot it shows. A key whose coordinates never arrived

@@ -1,3 +1,4 @@
+using System.Globalization;
 using ClaudeDeck.Core.Sessions;
 
 namespace ClaudeDeck.Core.Rendering;
@@ -9,6 +10,7 @@ public sealed record SessionSlotFace(
     string? Project,
     int? ContextPercent,
     bool ContextEstimated);
+
 
 /// <summary>
 /// Draws one session slot: what the session is called, what it is doing, and how full its
@@ -30,6 +32,17 @@ public sealed record SessionSlotFace(
 /// An unknown context leaves the bar empty and reads as a dash. Measured reason: a compaction
 /// leaves the size unknown until the session's next turn, and a full-looking empty bar would
 /// say the context is free — the opposite of what has just happened.
+///
+/// A slot waiting to be looked at swells and fades. Moving rather than one more colour: the
+/// point is to be caught by an eye pointed at a screen rather than at the deck, and a static
+/// colour among five other static colours is not. Swelling rather than blinking, because a
+/// key that snaps between two states pulls the eye off the work — rejected on the device for
+/// exactly that.
+///
+/// The swell is sent frame by frame, because the device offers no other way: an animated SVG
+/// is rasterized once and an animated GIF is shown as a still, both measured. The frames go
+/// out unthrottled, and each one is timed from the clock rather than counted, which is what
+/// keeps the swell even — see <see cref="SlotPulse"/>.
 /// </summary>
 public static class SessionKeyFace
 {
@@ -40,6 +53,14 @@ public static class SessionKeyFace
     private const string Waiting = "#5c3f12";
     private const string Compacting = "#2e2a4d";
     private const string Gone = "#232830";
+
+    /// <summary>
+    /// The top of the swell. Warm enough to be seen coming and dark enough to keep the white
+    /// name readable at every point in between, which is what lets the whole face stay put
+    /// while only its background moves.
+    /// </summary>
+    private const string Lit = "#8a5c22";
+
 
     // How full is worth reacting to. Below the first there is nothing to do, above the second
     // the session is close to compacting.
@@ -74,9 +95,14 @@ public static class SessionKeyFace
             .Text("–", 84, 40, KeyPalette.Dim)
             .ToDataUrl();
 
-    public static string Render(SessionSlotFace session)
+    /// <param name="attention">
+    /// How far into the swell this slot is, from 0 for the ordinary face to 1 for the top of
+    /// it. Only the background moves: everything a key says stays exactly where it was, so
+    /// the swell is read at the edge of vision without the face becoming unreadable.
+    /// </param>
+    public static string Render(SessionSlotFace session, double attention = 0)
     {
-        var image = new KeyImage().Background(Background(session.State));
+        var image = new KeyImage().Background(Blend(Background(session.State), Lit, attention));
 
         var lines = Wrap(session.Title ?? session.Project ?? "session");
         var top = lines.Count == 1 ? 56 : 42;
@@ -105,6 +131,30 @@ public static class SessionKeyFace
         { } percent when session.ContextEstimated => $"{percent}%?",
         { } percent => $"{percent}%",
     };
+
+    /// <summary>
+    /// Mixes two <c>#rrggbb</c> colours. An amount of zero returns the first one unchanged,
+    /// which is what keeps a slot that is not swelling byte for byte the face it already had,
+    /// and therefore never resent.
+    /// </summary>
+    private static string Blend(string from, string to, double amount)
+    {
+        var mix = Math.Clamp(amount, 0, 1);
+        if (mix <= 0)
+        {
+            return from;
+        }
+
+        return "#" + string.Concat(Enumerable.Range(0, 3).Select(channel =>
+        {
+            var start = Channel(from, channel);
+            var end = Channel(to, channel);
+            return ((int)Math.Round(start + ((end - start) * mix))).ToString("x2", CultureInfo.InvariantCulture);
+        }));
+    }
+
+    private static int Channel(string colour, int index) =>
+        Convert.ToInt32(colour.Substring(1 + (index * 2), 2), 16);
 
     private static string Background(SessionState state) => state switch
     {

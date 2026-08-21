@@ -188,7 +188,8 @@ internal sealed class HubClient(SessionRegistry sessions, string? token, Action<
             session.Branch,
             session.Context?.Tokens,
             session.Context?.Percent,
-            session.Context?.Estimated ?? false))]);
+            session.Context?.Estimated ?? false,
+            session.AwaitingUser))]);
 
     private static async Task<Envelope?> ReceiveAsync(ClientWebSocket socket, CancellationToken cancellationToken)
     {
