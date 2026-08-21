@@ -143,11 +143,34 @@ internal sealed class HubClient(SessionRegistry sessions, string? token, Action<
     {
         while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
         {
-            if (await ReceiveAsync(socket, cancellationToken) is null)
+            if (await ReceiveAsync(socket, cancellationToken) is not { } envelope)
             {
                 return;
             }
+
+            Handle(envelope);
         }
+    }
+
+    /// <summary>
+    /// Acts on what the hub sends. Anything unrecognised is ignored rather than complained
+    /// about: a newer plugin talking about something this build has no idea of is not a fault.
+    /// </summary>
+    private void Handle(Envelope envelope)
+    {
+        if (envelope.Type != HubProtocol.Forget)
+        {
+            return;
+        }
+
+        if (envelope.PayloadAs<ForgetSession>() is not { SessionId.Length: > 0 } forget)
+        {
+            return;
+        }
+
+        sessions.Forget(forget.SessionId);
+        log($"session {forget.SessionId} cleared from the deck");
+        Publish();
     }
 
     private SessionsUpdate Snapshot() =>

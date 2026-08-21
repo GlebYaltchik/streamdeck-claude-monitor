@@ -42,6 +42,22 @@ public sealed class AgentRegistry
         }
     }
 
+    /// <summary>
+    /// The connection of the agent that reported a session, or null when nobody claims it.
+    /// The plugin holds session ids, not agent ids, so this is how a key press finds its way
+    /// back to the machine the session lives on.
+    /// </summary>
+    public Guid? ConnectionFor(string sessionId)
+    {
+        lock (_gate)
+        {
+            var owner = _agents.Values.FirstOrDefault(entry =>
+                entry.Agent.Sessions.Any(session => string.Equals(session.Id, sessionId, StringComparison.Ordinal)));
+
+            return owner?.Connection;
+        }
+    }
+
     public void Connected(Guid connection, ConnectedAgent agent)
     {
         lock (_gate)

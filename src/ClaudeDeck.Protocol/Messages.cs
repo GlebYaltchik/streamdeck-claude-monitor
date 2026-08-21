@@ -13,6 +13,14 @@ public sealed record Welcome(int HeartbeatSeconds);
 public sealed record SessionsUpdate(IReadOnlyList<AgentSession> Sessions);
 
 /// <summary>
+/// Hub to agent: drop this session from the registry without waiting for it to go silent.
+///
+/// Harmless when it is wrong. A session that is in fact still running re-registers on its
+/// next hook, so the worst outcome is a key that is briefly empty.
+/// </summary>
+public sealed record ForgetSession(string SessionId);
+
+/// <summary>
 /// A session as it crosses the wire. Deliberately not the agent's own record: the hub is
 /// given what a key has to draw, and gains no opinion about the agent's internals.
 ///

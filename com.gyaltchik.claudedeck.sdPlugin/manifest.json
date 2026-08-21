@@ -48,7 +48,7 @@
       "Name": "Session",
       "UUID": "com.gyaltchik.claudedeck.session",
       "Icon": "imgs/key",
-      "Tooltip": "One Claude Code session: what it is called, what it is doing, and how full its context is.",
+      "Tooltip": "One Claude Code session: what it is called, what it is doing, and how full its context is. Hold to clear a session that is gone.",
       "Controllers": [
         "Keypad"
       ],

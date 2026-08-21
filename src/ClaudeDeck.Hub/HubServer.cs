@@ -56,6 +56,21 @@ public sealed class HubServer : IAsyncDisposable
     /// <summary>The port actually in use, which differs from the option when it asked for any.</summary>
     public int Port { get; private set; }
 
+    /// <summary>
+    /// Asks whichever agent owns a session to drop it. Returns whether the request reached an
+    /// agent at all — false when nobody claims the session, or its connection has just gone.
+    /// </summary>
+    public async Task<bool> ForgetSessionAsync(string sessionId)
+    {
+        if (Agents.ConnectionFor(sessionId) is not { } connection ||
+            !_links.TryGetValue(connection, out var link))
+        {
+            return false;
+        }
+
+        return await link.SendAsync(Envelope.Write(HubProtocol.Forget, new ForgetSession(sessionId)));
+    }
+
     /// <summary>Binds what is available now and keeps watching for what appears later.</summary>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -168,6 +183,7 @@ public sealed class HubServer : IAsyncDisposable
 
                 if (await GreetAsync(socket, connection, link, handshake.Token))
                 {
+                    link.Socket = socket;
                     _links[connection] = link;
                     await PumpAsync(socket, connection, link);
                 }
@@ -257,7 +273,7 @@ public sealed class HubServer : IAsyncDisposable
                     break;
 
                 case HubProtocol.Ping:
-                    await SendAsync(socket, Envelope.Write(HubProtocol.Pong), link.Token);
+                    await link.SendAsync(Envelope.Write(HubProtocol.Pong));
                     Agents.Touch(connection, now);
                     break;
 
@@ -344,15 +360,24 @@ public sealed class HubServer : IAsyncDisposable
         _stopping.Dispose();
     }
 
-    /// <summary>One live connection: how to stop it, and when it last said anything.</summary>
+    /// <summary>One live connection: how to reach it, how to stop it, and when it last spoke.</summary>
     private sealed class Link(CancellationToken cancellationToken) : IDisposable
     {
         private readonly CancellationTokenSource _cancellation =
             CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
+        /// <summary>
+        /// A websocket permits one send at a time, and this one now has two senders: the pump
+        /// answering pings, and whatever key the user just pressed.
+        /// </summary>
+        private readonly SemaphoreSlim _sending = new(1, 1);
+
         private long _lastMessageTicks = DateTimeOffset.UtcNow.UtcTicks;
 
         public CancellationToken Token => _cancellation.Token;
+
+        /// <summary>Set once the handshake succeeded; null before that.</summary>
+        public WebSocket? Socket { get; set; }
 
         /// <summary>What the logs call this agent. Only set once the handshake succeeded.</summary>
         public string Machine { get; set; } = "unknown";
@@ -374,6 +399,49 @@ public sealed class HubServer : IAsyncDisposable
             }
         }
 
-        public void Dispose() => _cancellation.Dispose();
+        /// <summary>
+        /// Returns whether the message actually went out. A closed or dying socket is not an
+        /// error here: the caller is a key press, and the agent is about to be dropped anyway.
+        /// </summary>
+        public async Task<bool> SendAsync(string message)
+        {
+            if (Socket is not { State: WebSocketState.Open })
+            {
+                return false;
+            }
+
+            try
+            {
+                await _sending.WaitAsync(Token);
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+            {
+                return false;
+            }
+
+            try
+            {
+                await Socket.SendAsync(
+                    Encoding.UTF8.GetBytes(message),
+                    WebSocketMessageType.Text,
+                    endOfMessage: true,
+                    Token);
+                return true;
+            }
+            catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or ObjectDisposedException)
+            {
+                return false;
+            }
+            finally
+            {
+                _sending.Release();
+            }
+        }
+
+        public void Dispose()
+        {
+            _cancellation.Dispose();
+            _sending.Dispose();
+        }
     }
 }

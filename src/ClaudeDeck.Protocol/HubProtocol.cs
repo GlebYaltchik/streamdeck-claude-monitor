@@ -24,6 +24,12 @@ public static class HubProtocol
     /// <summary>Agent to hub: every session it currently knows about.</summary>
     public const string Sessions = "sessions";
 
+    /// <summary>
+    /// Hub to agent: retire this session now. The user knows its terminal is gone and should
+    /// not have to wait out a timeout that exists only because the agent cannot tell.
+    /// </summary>
+    public const string Forget = "forget";
+
     public const string Ping = "ping";
 
     public const string Pong = "pong";

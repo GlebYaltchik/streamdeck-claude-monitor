@@ -29,7 +29,7 @@ internal static class Program
 
         var usageAction = new UsageAction(connection, usage);
         var summaryAction = new SummaryAction(connection, hub.Agents);
-        var sessionAction = new SessionAction(connection, hub.Agents);
+        var sessionAction = new SessionAction(connection, hub.Agents, hub.ForgetSessionAsync);
         var actions = new IDeckAction[]
         {
             usageAction,

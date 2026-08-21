@@ -401,6 +401,19 @@ turned out to have almost no coloured pixels to read it from; state moved to the
 which is there whatever the numbers say, and the bar was freed to show how full is worth
 reacting to.
 
+**Holding a slot key clears the session on it.** Liveness rests on silence alone (§4.1), so the
+timeouts are long; the person looking at the deck almost always knows the terminal is gone and
+should not wait out a timeout that exists only because the agent cannot tell. Held rather than
+tapped, because a key is easy to brush against and a tap will mean something else. It fires the
+moment the hold is long enough rather than on release, so the key clears under the finger —
+that is the only thing that says the hold was long enough. Harmless when wrong: a session that
+is in fact alive re-registers on its next hook.
+
+This is the first message the hub sends an agent after the handshake, and it is addressed: the
+hub finds the agent that reported the session and tells only that one, which matters as soon as
+there are two machines. The protocol version stays 1 — a receiver already ignores message types
+it does not know.
+
 **Slots are dynamic but sticky.** A session takes the lowest free slot on first sight and holds
 it until it ends; a freed slot goes only to a new session. No reordering by activity — keys that
 move under your fingers are irritating in Phase 2 and dangerous in Phase 4, where the same key
