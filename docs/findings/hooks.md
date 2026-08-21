@@ -108,6 +108,29 @@ Additional fields per event:
   a `SessionStart` and no end, because the user had no obvious way to close it. This is
   direct evidence for the liveness problem in design §4.1: `SessionEnd` cannot be relied on
   to retire a slot, and the PID and mtime fallbacks are mandatory rather than defensive.
+  The PID leg later turned out not to be available at all — see below.
+
+## Liveness: what the agent can actually ask
+
+Measured while building the stale-session sweep, on Claude Code 2.1.237 running inside the
+Claude desktop app.
+
+- **No hook payload carries a process id.** Not in the captured samples, not in any live
+  event since. The schema above is the whole of it.
+- **The interim shim cannot supply one either.** `curl` forwards stdin and exits; it knows
+  nothing about its own ancestry and has nowhere to put it if it did. Design §4.1 described
+  the agent recording the `claude` PID by walking the hook process's ancestors, which was
+  written for the NativeAOT shim of §3.2 and does not survive the substitution.
+- **Finding the process independently does not work here.** With sessions live in the
+  desktop app, exactly one `claude-code` CLI process was running, parented to the app, and
+  its command line named neither a session id nor a working directory. Even a process found
+  by name cannot be matched to a session.
+- **Transcript mtime does track live writes.** On a session mid-turn the file's last-write
+  time trailed the wall clock by 2.6 seconds, so the directory entry is updated as the
+  session appends rather than held until close.
+
+So liveness rests on two witnesses, both already to hand: the last hook the session caused,
+and the last write to its transcript. The PID leg waits for the shim.
 
 ## Cost of the recorder
 

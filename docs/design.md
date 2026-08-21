@@ -132,9 +132,22 @@ Three things the payloads settled:
 
 **Liveness is mandatory, not defensive.** A session left open emits no `SessionEnd` — observed
 directly, when a session could not be closed through the UI and simply never ended. Relying on
-`SessionEnd` would pin a slot forever. So the agent also records the `claude` PID by walking
-the hook process's ancestors, watches transcript mtime, and marks a session `Stale` when
-neither shows life.
+`SessionEnd` would pin a slot forever. So the agent judges a session by the last hook it caused
+and the last write to its transcript, marks it `Stale` when neither has moved for a while, and
+drops it altogether after much longer — the mark alone still holds the slot.
+
+**Correction to an earlier version of this section.** It said the agent also records the
+`claude` PID by walking the hook process's ancestors. It does not, and with the interim shim it
+cannot: `curl` forwards stdin and exits, and no hook payload carries a process id. Finding the
+process independently does not help either — measured with sessions live in the desktop app,
+one `claude-code` CLI process was running for them and its command line named neither a session
+id nor a working directory. Ancestor walking was written for the NativeAOT shim of §3.2 and
+belongs to it; see [findings/hooks.md](findings/hooks.md).
+
+**Both timeouts are long, and that is the cost of having no PID.** Silence is weak evidence: a
+session sitting untouched in an open terminal looks exactly like one whose terminal is gone.
+`Stale` is therefore a reading rather than a verdict, and the session's next event takes it
+straight back off.
 
 ### 4.2 Context fill level
 
@@ -425,7 +438,7 @@ wrapper. The only external surface is HTTP to one endpoint.
 | Accidental approval of a dangerous command | Medium | **Critical** | Danger classification, long press, full command shown first |
 | The usage endpoint changes or disappears | High | Medium | Behind `IUsageProvider`; the key shows "no data" and the plugin survives |
 | The built-in permission policy is approximated badly | High | **Low** | Both errors safe by construction (§6.3) |
-| Session PID detection is unreliable | Medium | Low | Inactivity timeout fallback, built at the same time |
+| Session PID detection is unreliable | **Confirmed unavailable** | Low | No PID with the `curl` shim; liveness runs on hook and transcript silence instead (§4.1) |
 | Update floods saturate the deck socket | **Confirmed** | Medium | 4 Hz cap with per-key dirty flags, measured as necessary |
 
 Resolved by reconnaissance and no longer tracked: the usage source being unavailable, WSL

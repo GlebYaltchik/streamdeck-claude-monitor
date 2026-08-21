@@ -118,6 +118,43 @@ public class SessionRegistryTests
         Assert.Equal("acceptEdits", session.PermissionMode);
     }
 
+    /// <summary>
+    /// Stale is a reading, not a verdict. With no process id to ask, it rests on silence
+    /// alone, and a session sitting untouched in an open terminal is indistinguishable from
+    /// one whose terminal is gone until it speaks.
+    /// </summary>
+    [Fact]
+    public void A_stale_session_is_alive_again_the_moment_it_speaks()
+    {
+        var registry = Started();
+        registry.MarkStale("session-1");
+        Assert.Equal(SessionState.Stale, Only(registry).State);
+
+        registry.Apply(Event("SubagentStop"));
+
+        Assert.Equal(SessionState.Idle, Only(registry).State);
+    }
+
+    [Fact]
+    public void Forgetting_a_session_frees_its_slot()
+    {
+        var registry = Started();
+        registry.Forget("session-1");
+
+        Assert.Empty(registry.Snapshot());
+    }
+
+    [Fact]
+    public void Retiring_a_session_that_is_already_gone_is_harmless()
+    {
+        var registry = new SessionRegistry();
+
+        registry.MarkStale("never-seen");
+        registry.Forget("never-seen");
+
+        Assert.Empty(registry.Snapshot());
+    }
+
     [Fact]
     public void An_event_without_a_session_id_is_not_an_event_we_can_use()
     {

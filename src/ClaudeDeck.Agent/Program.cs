@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using ClaudeDeck.Agent;
 using ClaudeDeck.Core.Sessions;
@@ -17,11 +18,20 @@ var port = Environment.GetEnvironmentVariable("CLAUDEDECK_AGENT_PORT") is { } co
     ? parsed
     : DefaultPort;
 
+// Both are long because silence is weak evidence: with no process id to ask, a session that
+// is merely idle looks exactly like one whose terminal was closed. Short enough to be worth
+// having, long enough not to grey out a session its owner is still thinking about, and
+// overridable so either can be cut to seconds when testing on the device.
+var staleAfter = Silence("CLAUDEDECK_STALE_AFTER_MINUTES", 120);
+var forgetAfter = Silence("CLAUDEDECK_FORGET_AFTER_MINUTES", 720);
+
 var events = new EventLog();
 var sessions = new SessionRegistry();
 var hub = new HubClient(sessions, HubToken.Read(), Console.WriteLine);
 var context = new ContextTracker(sessions, Console.WriteLine);
 context.Changed += hub.Publish;
+var liveness = new LivenessMonitor(sessions, staleAfter, forgetAfter, Console.WriteLine);
+liveness.Changed += hub.Publish;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
@@ -78,10 +88,19 @@ using var stopping = new CancellationTokenSource();
 app.Lifetime.ApplicationStopping.Register(stopping.Cancel);
 var reporting = hub.RunAsync(stopping.Token);
 var tracking = context.RunAsync(stopping.Token);
+var watching = liveness.RunAsync(stopping.Token);
 
 app.Run();
-await Task.WhenAll(reporting, tracking);
+await Task.WhenAll(reporting, tracking, watching);
 return;
+
+static TimeSpan Silence(string variable, int fallbackMinutes) =>
+    TimeSpan.FromMinutes(
+        Environment.GetEnvironmentVariable(variable) is { } value &&
+        double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var minutes) &&
+        minutes > 0
+            ? minutes
+            : fallbackMinutes);
 
 void Track(string name, string payload)
 {

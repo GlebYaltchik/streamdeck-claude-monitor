@@ -91,6 +91,34 @@ public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
         }
     }
 
+    /// <summary>
+    /// Marks a session as showing no sign of life. Not a removal: it may still be sitting in
+    /// an open terminal with nothing to do, and its next event takes the mark off again.
+    /// </summary>
+    public void MarkStale(string sessionId)
+    {
+        lock (_gate)
+        {
+            if (_sessions.TryGetValue(sessionId, out var session))
+            {
+                _sessions[sessionId] = session with { State = SessionState.Stale };
+            }
+        }
+    }
+
+    /// <summary>
+    /// Drops one session for good. <c>SessionEnd</c> was measured not to arrive for a session
+    /// that is simply left open, so a slot held by something long gone is released on silence
+    /// alone or never.
+    /// </summary>
+    public void Forget(string sessionId)
+    {
+        lock (_gate)
+        {
+            _sessions.Remove(sessionId);
+        }
+    }
+
     /// <summary>Drops sessions whose id is not in the given set, used after a rescan.</summary>
     public void RetainOnly(IReadOnlySet<string> sessionIds)
     {
@@ -115,6 +143,10 @@ public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
     {
         var updated = session with
         {
+            // An event of any kind is proof of life. A session marked stale on silence is
+            // only stale until it speaks again, and most of the transitions below overwrite
+            // this anyway.
+            State = session.State == SessionState.Stale ? SessionState.Idle : session.State,
             LastEventAt = hookEvent.ReceivedAt,
             Cwd = hookEvent.Cwd ?? session.Cwd,
             TranscriptPath = hookEvent.TranscriptPath ?? session.TranscriptPath,
