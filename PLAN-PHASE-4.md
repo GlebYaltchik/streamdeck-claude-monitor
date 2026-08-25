@@ -1,6 +1,6 @@
 # Plan: ClaudeDeck phase 4 — answer permission prompts from the deck
 
-<!-- 9 steps: 1 observe, 2 kill switch, 3 show, 4-5 decide, 6 queue, 7 danger, 8-9 remember. -->
+<!-- 9 steps: 1 observe, 2 kill switch, 3 show, 4 answer, 5 settings, 6 addressing, 7 danger, 8-9 remember. -->
 
 ## Goal
 
@@ -32,6 +32,12 @@ Three parts of the original plan are therefore gone: the permission predictor, i
 tightening against recorded sessions, and the wait budget the whole design had to be arranged
 around.
 
+**Answering moved onto the session key** after a standalone Deny key was built and tried. With
+one session waiting it worked; with several it has to pick one, and "the oldest" is a guess the
+key cannot explain in the space it has — a session name rarely fits on a key. The question and
+its answer now live on the same key, and a separate answer key returns in Step 6, once a press
+can say which session it means.
+
 ## Assumptions / context
 
 - [PLAN.md](PLAN.md) is complete: sessions, state, context fill, liveness and alerts already
@@ -57,7 +63,7 @@ around.
   and the session waits for a human — but the deck must not keep showing a request it can no
   longer answer.
 - **`allow` from a key is irreversible the moment the command runs.** Unchanged from the
-  original plan: long press (Step 5), danger classification (Step 7), and the command shown
+  original plan: a long press (Step 4), danger classification (Step 7), and the command shown
   before the key can be pressed (Step 3).
 - **"Allow always" writes into the user's permission state.** `permission_suggestions` name
   their own destination, and `localSettings` means editing a file inside the user's repository
@@ -97,49 +103,58 @@ around.
 
 ### Step 3: Show what is being asked
 
-- **Change:** The pending call on the deck: tool name and command text on the slot key, and the
-  full command on the encoder's touch strip. Design §6.4-4 — no approval for something the user
-  cannot read — is now shared with the session's own prompt, which shows the command in full
-  anyway; the deck's job is to say *which* session is asking and *what* it is asking, so the
-  right window can be found without hunting.
+- **Change:** The pending call on the deck: the tool and one line of the command on the slot
+  key, and who is waiting on the encoder's touch strip. The strip was tried with the command
+  itself and could not carry it — one dial's segment holds about two dozen characters, and at a
+  size that fits them nothing is readable across a desk. Design §6.4-4 — no approval for
+  something the user cannot read — is shared with the session's own prompt, which has the
+  command in full and is on screen the whole time; the deck says which session is asking and
+  roughly what about, so the right window is found without hunting.
 - **Files:** `src/ClaudeDeck.Core/Rendering/*`, `src/ClaudeDeck.Plugin/Actions/*`,
   `tests/ClaudeDeck.Core.Tests/*`
 - **Verify:** on the device, a waiting session's key names the tool and shows as much of the
-  command as fits, and the strip shows the command in full
+  command as fits, and the strip names the session waiting
 - **Commit:** `plugin: show the pending permission request`
 
-### Step 4: Deny from the deck
+### Step 4: Answer on the session's own key
 
-- **Change:** The first real decision, and deliberately the half that cannot wave anything
-  through. In Active mode a Deny key answers the pending request with a canned reason, which the
-  measurement confirmed reaches the model. Every failure path — no plugin, no hub, a mode that
-  is not Active, a session in a mode the client ignores decisions in — leaves the prompt exactly
-  where it is.
-- **Files:** `src/ClaudeDeck.Protocol/*`, `src/ClaudeDeck.Hub/*`, `src/ClaudeDeck.Agent/*`,
-  `src/ClaudeDeck.Plugin/Actions/*`
-- **Verify:** `dotnet test`; interactively, a `Bash` prompt is answered from the deck and the
-  session shows the denial with the reason; with the plugin stopped the same prompt waits for
-  the terminal as usual
-- **Commit:** `plugin: deny a pending permission request from the deck`
+- **Change:** A tap denies the question the key is showing, a hold allows it. Answering belongs
+  on the key that shows the question: a separate answer key has to name which session it means,
+  and a session name rarely fits on a key — with two sessions waiting, "deny" on its own is a
+  guess. The gestures are borrowed while a question is open and given back when it closes;
+  clearing a slot is unavailable meanwhile, because a session stopped at a question is not one
+  anybody wants to drop. Allowing is held half again as long as clearing, so muscle memory from
+  one cannot run a command through the other. A key that can answer differs from one that only
+  reports by colour alone: movement already means the attention swell.
+- **Files:** `src/ClaudeDeck.Plugin/Actions/SessionAction.cs`, `src/ClaudeDeck.Core/Rendering/*`,
+  `src/ClaudeDeck.Protocol/*`, `src/ClaudeDeck.Hub/*`, `src/ClaudeDeck.Agent/*`
+- **Verify:** `dotnet test`; interactively, a tap on a waiting slot denies with the reason
+  visible to the model, a hold runs the command with no prompt, and neither works with the
+  deck in observe
+- **Commit:** `plugin: answer a permission on the session key`
 
-### Step 5: Allow, on a long press
+### Step 5: Turn answering off without a mode key on the deck
 
-- **Change:** The dangerous direction, added only once the request is readable. Held rather than
-  tapped, for the reason hold-to-clear already established: a key is easy to brush against, and
-  `allow` is irreversible the moment the command runs.
-- **Files:** `src/ClaudeDeck.Plugin/Actions/*`, `src/ClaudeDeck.Agent/*`
-- **Verify:** `dotnet test`; interactively, a command that would prompt runs when allowed from
-  the deck; a short press does nothing
-- **Commit:** `plugin: allow a pending permission request on a long press`
+- **Change:** Today the only way to stop a key answering is an Approvals key on the deck. A
+  panel without one has no switch at all, and the mode it inherits is invisible. The mode moves
+  into the plugin's own settings, where an Approvals key sets it when there is one and a
+  checkbox in the Property Inspector does when there is not. Off by default either way.
+- **Files:** `src/ClaudeDeck.Plugin/*`, `com.gyaltchik.claudedeck.sdPlugin/ui/*`
+- **Verify:** on the device, a deck with no Approvals key answers nothing until the checkbox is
+  ticked, and the choice survives a plugin restart; with an Approvals key present the two agree
+- **Commit:** `plugin: keep the approval mode in the plugin settings`
 
-### Step 6: Several at once
+### Step 6: Address one session, then answer with separate keys
 
-- **Change:** More than one session can be waiting, and the deck must be unambiguous about which
-  one a key press answers. The encoder scrolls the queue; the slot keys show who is in it.
-- **Files:** `src/ClaudeDeck.Plugin/Actions/*`, `src/ClaudeDeck.Core/Rendering/*`
-- **Verify:** on the device, two sessions waiting at once are both listed, the strip shows each
-  one's command, and Deny answers the one on screen and no other
-- **Commit:** `plugin: scroll between pending permission requests`
+- **Change:** The other way round, and the one that makes a standalone answer key honest: a
+  press on a session key makes that session the one the deck is talking about, and Allow and
+  Deny keys then answer it. The address is dropped when it is used, when the same key is
+  pressed again, or after twenty seconds — an address that outlives what it was for is how the
+  wrong session gets answered.
+- **Files:** `src/ClaudeDeck.Plugin/*`, `src/ClaudeDeck.Core/Rendering/*`
+- **Verify:** on the device, with two sessions waiting, addressing one and pressing Deny
+  answers that one and no other; the address lapses on its own after twenty seconds
+- **Commit:** `plugin: address a session and answer it from separate keys`
 
 ### Step 7: Classify dangerous commands and say so
 
@@ -156,9 +171,9 @@ around.
 ### Step 8: Remember an "allow always"
 
 - **Change:** The third console answer. The protocol offers `permission_suggestions` and would
-  write the rule into the user's own settings; we keep the rule in **the agent's store** instead,
-  matching design §6.2 — an accidental press must not edit a file inside the user's repository.
-  A remembered rule then answers matching requests without the deck being touched.
+  write the rule into the user's own settings; we keep the rule in **the agent's store**
+  instead, matching design §6.2 — an accidental press must not edit a file inside the user's
+  repository. A remembered rule then answers matching requests without the deck being touched.
 - **Files:** `src/ClaudeDeck.Agent/*`, `src/ClaudeDeck.Core/Permissions/*`,
   `tests/ClaudeDeck.Agent.Tests/*`
 - **Verify:** `dotnet test`; interactively, a command allowed always runs without a prompt on

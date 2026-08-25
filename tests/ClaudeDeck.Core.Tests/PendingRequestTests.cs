@@ -56,6 +56,33 @@ public class PendingRequestTests
     }
 
     /// <summary>
+    /// A key that can answer and a key that only reports must be told apart without reading:
+    /// the words are the same and only the colour differs. Movement is not used for it,
+    /// because movement already means the attention swell and two moving things say neither.
+    /// </summary>
+    [Fact]
+    public void A_key_that_can_answer_differs_only_in_colour()
+    {
+        var asking = new SessionSlotFace(
+            SessionState.WaitingApproval,
+            Title: "deck plugin",
+            Project: "streamdeck",
+            ContextPercent: 40,
+            ContextEstimated: false,
+            PendingTool: "Bash",
+            PendingSummary: "git push --force");
+
+        var reporting = Decode(SessionKeyFace.Render(asking));
+        var answering = Decode(SessionKeyFace.Render(asking, answerable: true));
+
+        Assert.NotEqual(reporting, answering);
+        Assert.Equal(Words(reporting), Words(answering));
+    }
+
+    private static string Words(string svg) =>
+        string.Concat(svg.Split('>').Where(part => part.Contains('<')).Select(part => part.Split('<')[0]));
+
+    /// <summary>
     /// The strip says who, not what. Measured on the device: a command at a size that fits
     /// one dial's segment cannot be read at arm's length, and half a command is worse than
     /// none.

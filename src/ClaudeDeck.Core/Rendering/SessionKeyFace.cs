@@ -52,7 +52,14 @@ public static class SessionKeyFace
     // to be told apart at arm's length.
     private const string Working = "#16324f";
     private const string Idle = "#17331f";
-    private const string Waiting = "#5c3f12";
+    private const string Waiting = "#4b4033";
+
+    /// <summary>
+    /// A question this deck can answer, rather than one it is only reporting. Brighter than
+    /// the same state without the power to act, and told apart by colour alone: movement is
+    /// what the attention swell means, and two moving things on one key say neither.
+    /// </summary>
+    private const string Answerable = "#96690f";
     private const string Compacting = "#2e2a4d";
     private const string Gone = "#232830";
 
@@ -105,11 +112,17 @@ public static class SessionKeyFace
     /// it. Only the background moves: everything a key says stays exactly where it was, so
     /// the swell is read at the edge of vision without the face becoming unreadable.
     /// </param>
-    public static string Render(SessionSlotFace session, double attention = 0)
+    /// <param name="answerable">
+    /// Whether a press on this key would answer the question it is showing. Only the colour
+    /// changes: a key that can act and one that cannot must not be told apart by reading.
+    /// </param>
+    public static string Render(SessionSlotFace session, double attention = 0, bool answerable = false)
     {
-        var image = new KeyImage().Background(Blend(Background(session.State), Lit, attention));
+        var asking = session.State == SessionState.WaitingApproval && session.PendingTool is { Length: > 0 };
+        var background = asking && answerable ? Answerable : Background(session.State);
+        var image = new KeyImage().Background(Blend(background, Lit, attention));
 
-        if (session.State == SessionState.WaitingApproval && session.PendingTool is { Length: > 0 })
+        if (asking)
         {
             return Asking(image, session);
         }

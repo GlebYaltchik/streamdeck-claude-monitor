@@ -40,16 +40,17 @@ internal static class Program
         var modes = new DeckModes();
         var usageAction = new UsageAction(connection, usage);
         var summaryAction = new SummaryAction(connection, hub.Agents);
-        var sessionAction = new SessionAction(connection, hub.Agents, alerts, hub.ForgetSessionAsync);
+        var sessionAction = new SessionAction(
+            connection,
+            hub.Agents,
+            alerts,
+            modes,
+            hub.ForgetSessionAsync,
+            (session, decision) => hub.DecideAsync(session, decision.Behaviour, decision.Message));
         var alertAction = new AlertAction(connection, alerts, () => sessionAction.Waiting());
         var modeAction = new ModeAction(connection, modes);
         var queue = new PendingQueue(hub.Agents);
         var approvalAction = new ApprovalAction(connection, queue);
-        var denyAction = new DenyAction(
-            connection,
-            modes,
-            queue,
-            (session, decision) => hub.DecideAsync(session, decision.Behaviour, decision.Message));
         var actions = new IDeckAction[]
         {
             usageAction,
@@ -58,14 +59,12 @@ internal static class Program
             alertAction,
             modeAction,
             approvalAction,
-            denyAction,
         }.ToDictionary(action => action.Uuid, StringComparer.Ordinal);
 
         hub.Agents.Changed += summaryAction.Refresh;
         hub.Agents.Changed += sessionAction.Refresh;
         hub.Agents.Changed += alertAction.Refresh;
         hub.Agents.Changed += approvalAction.Refresh;
-        hub.Agents.Changed += denyAction.Refresh;
 
         // Muting has to reach the slots as well as the key that did it.
         alerts.Changed += sessionAction.Refresh;
@@ -75,8 +74,8 @@ internal static class Program
         // holding questions open, which is what makes the switch a real one.
         modes.Changed += modeAction.Refresh;
 
-        // The deny key says whether it can do anything, and the mode is half of that answer.
-        modes.Changed += denyAction.Refresh;
+        // A session key answers only in active mode, and says so by its colour.
+        modes.Changed += sessionAction.Refresh;
         modes.Changed += () => _ = TellAgentsAsync(hub, modes);
 
         connection.EventReceived += deckEvent =>

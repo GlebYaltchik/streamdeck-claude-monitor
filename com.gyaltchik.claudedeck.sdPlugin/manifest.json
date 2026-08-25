@@ -126,21 +126,6 @@
           "TitleAlignment": "middle"
         }
       ]
-    },
-    {
-      "Name": "Deny",
-      "UUID": "com.gyaltchik.claudedeck.deny",
-      "Icon": "imgs/key",
-      "Tooltip": "Say no to the permission question a session is waiting on.",
-      "Controllers": [
-        "Keypad"
-      ],
-      "States": [
-        {
-          "Image": "imgs/key",
-          "TitleAlignment": "middle"
-        }
-      ]
     }
   ],
   "UUID": "com.gyaltchik.claudedeck"

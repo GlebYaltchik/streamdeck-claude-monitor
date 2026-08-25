@@ -1,6 +1,4 @@
-using System.Text;
 using ClaudeDeck.Core.Permissions;
-using ClaudeDeck.Core.Rendering;
 
 namespace ClaudeDeck.Core.Tests;
 
@@ -31,24 +29,5 @@ public class ApprovalDecisionTests
             """.Trim();
 
         Assert.Equal(expected, new ApprovalDecision(ApprovalDecision.Allow, "ignored").ToHookOutput());
-    }
-
-    /// <summary>
-    /// A key that looks the same when it will do nothing is pressed twice and then distrusted.
-    /// </summary>
-    [Fact]
-    public void The_deny_key_says_why_it_cannot_do_anything()
-    {
-        Assert.Contains(">not active<", Decode(DenyKeyFace.Render(DeckMode.Observe, waiting: 2)));
-        Assert.Contains(">none waiting<", Decode(DenyKeyFace.Render(DeckMode.Active, waiting: 0)));
-        Assert.Contains(">ready<", Decode(DenyKeyFace.Render(DeckMode.Active, waiting: 1)));
-        Assert.Contains(">oldest of 3<", Decode(DenyKeyFace.Render(DeckMode.Active, waiting: 3)));
-    }
-
-    private static string Decode(string dataUrl)
-    {
-        const string prefix = "data:image/svg+xml;base64,";
-        Assert.StartsWith(prefix, dataUrl);
-        return Encoding.UTF8.GetString(Convert.FromBase64String(dataUrl[prefix.Length..]));
     }
 }

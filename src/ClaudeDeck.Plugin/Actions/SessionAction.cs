@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using ClaudeDeck.Core.Permissions;
 using ClaudeDeck.Core.Rendering;
 using ClaudeDeck.Core.Sessions;
 using ClaudeDeck.Hub;
@@ -23,18 +24,43 @@ namespace ClaudeDeck.Plugin.Actions;
 /// It fires the moment the hold is long enough, not when the key is let go. The key then
 /// clears under the finger, which is the only thing that says the hold was long enough — wait
 /// for the release and a hold that was already sufficient looks the same as one that was not.
+///
+/// A session waiting for permission takes both gestures over: a tap denies and a hold allows.
+/// Answering belongs on the key that shows the question, because a separate answer key has to
+/// name which session it means, and a session name rarely fits on a key. While a question is
+/// open the slot cannot be cleared: the session is stopped anyway, and clearing it mid
+/// question would lose the one thing the key is there to say.
+///
+/// Allowing is held for half again as long as clearing. The two are otherwise the same
+/// movement, and muscle memory from one must not run a command through the other.
 /// </summary>
 internal sealed class SessionAction(
     IDeckConnection connection,
     AgentRegistry agents,
     Alerts alerts,
-    Func<string, Task<bool>> forgetSession) : IDeckAction
+    DeckModes modes,
+    Func<string, Task<bool>> forgetSession,
+    Func<string, ApprovalDecision, Task<bool>> decide) : IDeckAction
 {
+    /// <summary>What a hold on a key is for, decided when the key goes down.</summary>
+    private enum Held
+    {
+        Clear,
+        Allow,
+    }
+
     /// <summary>
     /// How long is long. Short enough not to feel like a wait, long enough that a knock
     /// against the deck does not reach it.
     /// </summary>
     private static readonly TimeSpan LongPress = TimeSpan.FromMilliseconds(800);
+
+    /// <summary>
+    /// Half again as long as clearing a slot. Allowing runs a command that Claude Code
+    /// stopped to ask about, and it must not be reachable by the hold somebody already has
+    /// in their fingers.
+    /// </summary>
+    private static readonly TimeSpan AllowPress = TimeSpan.FromMilliseconds(1200);
 
     private readonly Dictionary<string, DeckKey> _keys = new(StringComparer.Ordinal);
 
@@ -124,7 +150,39 @@ internal sealed class SessionAction(
             _holds[context] = hold;
         }
 
-        _ = HeldAsync(context, hold);
+        // What the hold means is settled now rather than when it fires: a question can be
+        // answered in its own window while a finger is still down, and the gesture should do
+        // what it meant when it started.
+        _ = HeldAsync(context, hold, Asking(context) is null ? Held.Clear : Held.Allow);
+    }
+
+    /// <summary>
+    /// The session waiting on this key, when the deck is allowed to answer it. Both halves
+    /// matter: a session with a question open, and a mode that lets a key answer one.
+    /// </summary>
+    private AgentSession? Asking(string context)
+    {
+        if (modes.Current != DeckMode.Active)
+        {
+            return null;
+        }
+
+        string? sessionId;
+
+        lock (_gate)
+        {
+            sessionId = _showing.GetValueOrDefault(context);
+        }
+
+        if (sessionId is null)
+        {
+            return null;
+        }
+
+        return agents.Snapshot()
+            .SelectMany(agent => agent.Sessions)
+            .FirstOrDefault(session =>
+                session.Id == sessionId && session.PendingTool is { Length: > 0 });
     }
 
     /// <summary>Returns whether there was a hold still running to abandon.</summary>
@@ -142,6 +200,14 @@ internal sealed class SessionAction(
     /// </summary>
     private void Tapped(string context)
     {
+        // A question takes the gesture over: on a waiting key a tap is the answer that costs
+        // a retry and cannot run anything.
+        if (Asking(context) is { } asking)
+        {
+            _ = AnswerAsync(asking, ApprovalDecision.Denied());
+            return;
+        }
+
         string? sessionId;
 
         lock (_gate)
@@ -156,6 +222,14 @@ internal sealed class SessionAction(
 
         alerts.Acknowledge(sessionId);
         Refresh();
+    }
+
+    private async Task AnswerAsync(AgentSession asking, ApprovalDecision decision)
+    {
+        var reached = await decide(asking.Id, decision);
+        PluginLog.Write(reached
+            ? decision.Behaviour + " for " + asking.PendingTool + " in " + (asking.Title ?? asking.Id)
+            : "nothing left to answer in " + (asking.Title ?? asking.Id));
     }
 
     private bool AbandonLocked(string context)
@@ -183,13 +257,13 @@ internal sealed class SessionAction(
     /// Waits out the hold and, if the key is still down, clears the session on it. Holding an
     /// empty slot is a press with nothing to mean and does nothing.
     /// </summary>
-    private async Task HeldAsync(string context, CancellationTokenSource hold)
+    private async Task HeldAsync(string context, CancellationTokenSource hold, Held meaning)
     {
         using (hold)
         {
             try
             {
-                await Task.Delay(LongPress, hold.Token);
+                await Task.Delay(meaning == Held.Allow ? AllowPress : LongPress, hold.Token);
             }
             catch (OperationCanceledException)
             {
@@ -213,6 +287,18 @@ internal sealed class SessionAction(
 
             if (sessionId is null)
             {
+                return;
+            }
+
+            if (meaning == Held.Allow)
+            {
+                // Asked again rather than trusted: the question may have been answered in its
+                // own window while the key was down, and then there is nothing to allow.
+                if (Asking(context) is { } asking)
+                {
+                    await AnswerAsync(asking, new ApprovalDecision(ApprovalDecision.Allow, null));
+                }
+
                 return;
             }
 
@@ -258,7 +344,10 @@ internal sealed class SessionAction(
             {
                 var lit = alerts.Alerting(session!.Id, session.AwaitingUser);
                 alerting |= lit;
-                face = SessionKeyFace.Render(Describe(session), lit ? SlotPulse.Glow(Elapsed()) : 0);
+                face = SessionKeyFace.Render(
+                    Describe(session),
+                    lit ? SlotPulse.Glow(Elapsed()) : 0,
+                    answerable: modes.Current == DeckMode.Active);
             }
             else
             {
