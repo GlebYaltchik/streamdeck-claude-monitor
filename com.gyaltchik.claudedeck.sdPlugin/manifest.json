@@ -88,6 +88,21 @@
           "TitleAlignment": "middle"
         }
       ]
+    },
+    {
+      "Name": "Approvals",
+      "UUID": "com.gyaltchik.claudedeck.mode",
+      "Icon": "imgs/key",
+      "Tooltip": "How far the deck is allowed into permission decisions: off, observe or active.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "middle"
+        }
+      ]
     }
   ],
   "UUID": "com.gyaltchik.claudedeck"

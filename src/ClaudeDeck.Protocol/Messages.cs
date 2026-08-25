@@ -21,6 +21,13 @@ public sealed record SessionsUpdate(IReadOnlyList<AgentSession> Sessions);
 public sealed record ForgetSession(string SessionId);
 
 /// <summary>
+/// Hub to agent: the deck's mode, by name — <c>off</c>, <c>observe</c> or <c>active</c>.
+/// A name this build does not know reads as <c>observe</c>, which is what an agent that was
+/// never told does too.
+/// </summary>
+public sealed record ModeUpdate(string Mode);
+
+/// <summary>
 /// A session as it crosses the wire. Deliberately not the agent's own record: the hub is
 /// given what a key has to draw, and gains no opinion about the agent's internals.
 ///

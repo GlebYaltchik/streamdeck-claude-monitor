@@ -1,3 +1,4 @@
+using ClaudeDeck.Core.Permissions;
 using ClaudeDeck.Core.Sessions;
 using ClaudeDeck.Hub;
 using ClaudeDeck.Plugin.Actions;
@@ -36,16 +37,19 @@ internal static class Program
         await using var connection = new StreamDeckConnection(arguments);
 
         var alerts = new Alerts();
+        var modes = new DeckModes();
         var usageAction = new UsageAction(connection, usage);
         var summaryAction = new SummaryAction(connection, hub.Agents);
         var sessionAction = new SessionAction(connection, hub.Agents, alerts, hub.ForgetSessionAsync);
         var alertAction = new AlertAction(connection, alerts, () => sessionAction.Waiting());
+        var modeAction = new ModeAction(connection, modes);
         var actions = new IDeckAction[]
         {
             usageAction,
             summaryAction,
             sessionAction,
             alertAction,
+            modeAction,
         }.ToDictionary(action => action.Uuid, StringComparer.Ordinal);
 
         hub.Agents.Changed += summaryAction.Refresh;
@@ -55,6 +59,11 @@ internal static class Program
         // Muting has to reach the slots as well as the key that did it.
         alerts.Changed += sessionAction.Refresh;
         alerts.Changed += alertAction.Refresh;
+
+        // The mode is the agents' business as much as the key's: with the deck off they stop
+        // holding questions open, which is what makes the switch a real one.
+        modes.Changed += modeAction.Refresh;
+        modes.Changed += () => _ = TellAgentsAsync(hub, modes);
 
         connection.EventReceived += deckEvent =>
             deckEvent.Action is not null && actions.TryGetValue(deckEvent.Action, out var action)
@@ -91,6 +100,23 @@ internal static class Program
 
         PluginLog.Write("stopped");
         return 0;
+    }
+
+    /// <summary>
+    /// Passes the mode to every connected agent. Detached from the key press on purpose: a
+    /// key must not wait on a websocket, and an agent that misses the message is told again
+    /// when it reconnects.
+    /// </summary>
+    private static async Task TellAgentsAsync(HubServer hub, DeckModes modes)
+    {
+        try
+        {
+            await hub.SetModeAsync(DeckModes.Name(modes.Current));
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Write($"could not send the mode: {ex.Message}");
+        }
     }
 
     private static async Task PulseAsync(SessionAction sessionAction, CancellationToken cancellationToken)

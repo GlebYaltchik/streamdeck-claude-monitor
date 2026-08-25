@@ -30,6 +30,13 @@ public static class HubProtocol
     /// </summary>
     public const string Forget = "forget";
 
+    /// <summary>
+    /// Hub to agent: how far the deck is allowed into permission decisions. Sent as each
+    /// agent connects and again whenever it changes, so an agent that was offline for the
+    /// change is not left acting on a mode nobody chose.
+    /// </summary>
+    public const string Mode = "mode";
+
     public const string Ping = "ping";
 
     public const string Pong = "pong";

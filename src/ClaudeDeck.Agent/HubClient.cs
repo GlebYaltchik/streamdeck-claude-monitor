@@ -1,5 +1,6 @@
 using System.Net.WebSockets;
 using System.Text;
+using ClaudeDeck.Core.Permissions;
 using ClaudeDeck.Core.Sessions;
 using ClaudeDeck.Protocol;
 
@@ -11,7 +12,11 @@ namespace ClaudeDeck.Agent;
 /// The agent works standalone: recording hooks must not depend on the plugin being up, so
 /// every failure here is logged, backed off and retried, and never propagates.
 /// </summary>
-internal sealed class HubClient(SessionRegistry sessions, string? token, Action<string> log)
+internal sealed class HubClient(
+    SessionRegistry sessions,
+    DeckModes modes,
+    string? token,
+    Action<string> log)
 {
     private static readonly TimeSpan Heartbeat = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan FirstRetry = TimeSpan.FromSeconds(1);
@@ -158,19 +163,19 @@ internal sealed class HubClient(SessionRegistry sessions, string? token, Action<
     /// </summary>
     private void Handle(Envelope envelope)
     {
-        if (envelope.Type != HubProtocol.Forget)
+        switch (envelope.Type)
         {
-            return;
-        }
+            case HubProtocol.Forget when envelope.PayloadAs<ForgetSession>() is { SessionId.Length: > 0 } forget:
+                sessions.Forget(forget.SessionId);
+                log($"session {forget.SessionId} cleared from the deck");
+                Publish();
+                break;
 
-        if (envelope.PayloadAs<ForgetSession>() is not { SessionId.Length: > 0 } forget)
-        {
-            return;
+            case HubProtocol.Mode when envelope.PayloadAs<ModeUpdate>() is { Mode.Length: > 0 } update:
+                modes.Set(DeckModes.Parse(update.Mode));
+                log($"deck is {DeckModes.Name(modes.Current)}");
+                break;
         }
-
-        sessions.Forget(forget.SessionId);
-        log($"session {forget.SessionId} cleared from the deck");
-        Publish();
     }
 
     private SessionsUpdate Snapshot() =>

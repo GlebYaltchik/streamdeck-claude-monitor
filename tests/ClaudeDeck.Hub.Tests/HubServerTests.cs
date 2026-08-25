@@ -5,6 +5,23 @@ namespace ClaudeDeck.Hub.Tests;
 
 public class HubServerTests
 {
+    /// <summary>
+    /// The switch has to reach the agents to be a switch at all: with the deck off they stop
+    /// holding permission questions open.
+    /// </summary>
+    [Fact]
+    public async Task A_change_of_mode_reaches_a_connected_agent()
+    {
+        await using var hub = new HubUnderTest();
+        using var agent = await hub.ConnectAgentAsync();
+
+        await hub.Server.SetModeAsync("off");
+
+        var sent = await HubUnderTest.ReceiveAsync(agent);
+        Assert.Equal(HubProtocol.Mode, sent?.Type);
+        Assert.Equal("off", sent?.PayloadAs<ModeUpdate>()?.Mode);
+    }
+
     [Fact]
     public async Task An_agent_with_the_right_token_is_accepted()
     {

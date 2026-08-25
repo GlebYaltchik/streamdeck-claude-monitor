@@ -44,6 +44,11 @@ internal sealed class HubUnderTest : IAsyncDisposable
 
         var welcome = await ReceiveAsync(socket);
         Assert.Equal(HubProtocol.Welcome, welcome?.Type);
+
+        // The handshake is two messages: an agent has to know the deck's mode before it
+        // starts holding anything open, so it is sent without being asked for.
+        var mode = await ReceiveAsync(socket);
+        Assert.Equal(HubProtocol.Mode, mode?.Type);
         return socket;
     }
 

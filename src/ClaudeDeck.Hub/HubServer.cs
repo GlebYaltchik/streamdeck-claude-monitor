@@ -53,6 +53,13 @@ public sealed class HubServer : IAsyncDisposable
 
     public AgentRegistry Agents { get; } = new();
 
+    /// <summary>
+    /// The deck's mode as every agent has been told it. Held here because an agent that
+    /// connects later has to be told too, and the key that owns the mode may not even be on
+    /// the deck.
+    /// </summary>
+    public string Mode { get; private set; } = "observe";
+
     /// <summary>The port actually in use, which differs from the option when it asked for any.</summary>
     public int Port { get; private set; }
 
@@ -69,6 +76,20 @@ public sealed class HubServer : IAsyncDisposable
         }
 
         return await link.SendAsync(Envelope.Write(HubProtocol.Forget, new ForgetSession(sessionId)));
+    }
+
+    /// <summary>
+    /// Tells every connected agent how far the deck is allowed in. Failures are ignored on
+    /// purpose: an agent that has just gone is told again when it comes back.
+    /// </summary>
+    public async Task SetModeAsync(string mode)
+    {
+        Mode = mode;
+
+        foreach (var link in _links.Values)
+        {
+            await link.SendAsync(Envelope.Write(HubProtocol.Mode, new ModeUpdate(mode)));
+        }
     }
 
     /// <summary>Binds what is available now and keeps watching for what appears later.</summary>
@@ -249,6 +270,7 @@ public sealed class HubServer : IAsyncDisposable
 
         var welcome = new Welcome((int)HeartbeatInterval.TotalSeconds);
         await SendAsync(socket, Envelope.Write(HubProtocol.Welcome, welcome), cancellationToken);
+        await SendAsync(socket, Envelope.Write(HubProtocol.Mode, new ModeUpdate(Mode)), cancellationToken);
         Log($"hub accepted agent {hello.Machine} ({hello.Platform})");
         return true;
     }

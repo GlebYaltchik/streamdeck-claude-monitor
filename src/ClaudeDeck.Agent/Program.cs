@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using ClaudeDeck.Agent;
+using ClaudeDeck.Core.Permissions;
 using ClaudeDeck.Core.Sessions;
 using ClaudeDeck.Protocol;
 
@@ -39,12 +40,13 @@ var approvalHold = Minutes("CLAUDEDECK_APPROVAL_HOLD_MINUTES", 15);
 
 var events = new EventLog();
 var sessions = new SessionRegistry();
-var hub = new HubClient(sessions, HubToken.Read(), Console.WriteLine);
+var modes = new DeckModes();
+var hub = new HubClient(sessions, modes, HubToken.Read(), Console.WriteLine);
 var context = new ContextTracker(sessions, Console.WriteLine);
 context.Changed += hub.Publish;
 var liveness = new LivenessMonitor(sessions, staleAfter, forgetAfter, Console.WriteLine);
 liveness.Changed += hub.Publish;
-var approvals = new PendingApprovals(sessions, approvalHold, Console.WriteLine);
+var approvals = new PendingApprovals(sessions, modes, approvalHold, Console.WriteLine);
 approvals.Changed += hub.Publish;
 
 var builder = WebApplication.CreateSlimBuilder(args);
@@ -86,7 +88,15 @@ app.MapPost("/hook/{hookEvent}", async (string hookEvent, HttpRequest request, C
     try
     {
         events.Append(hookEvent, payload);
-        tracked = Track(hookEvent, payload);
+        tracked = Parse(hookEvent, payload);
+
+        // A question the deck has no business in leaves the session's state alone: with the
+        // deck off, a slot must not go amber for something nobody on it can answer.
+        if (tracked is not null && (tracked.Name != PermissionRequest || approvals.Holds(tracked)))
+        {
+            sessions.Apply(tracked);
+            hub.Publish();
+        }
     }
     catch (Exception ex)
     {
@@ -94,10 +104,8 @@ app.MapPost("/hook/{hookEvent}", async (string hookEvent, HttpRequest request, C
     }
 
     // A permission question is held open while it is on screen, which is how the agent
-    // learns it was answered: the client drops the connection when it is. Held only where
-    // an answer from outside would count — elsewhere it would stall a session for nothing.
-    if (tracked is { Name: PermissionRequest } &&
-        PermissionModes.AnswerableFromOutside(tracked.PermissionMode))
+    // learns it was answered: the client drops the connection when it is.
+    if (tracked is not null && approvals.Holds(tracked))
     {
         await approvals.HoldAsync(tracked.SessionId, abandoned);
     }
@@ -127,22 +135,16 @@ static TimeSpan Minutes(string variable, int fallbackMinutes) =>
             ? minutes
             : fallbackMinutes);
 
-HookEvent? Track(string name, string payload)
+static HookEvent? Parse(string name, string payload)
 {
     try
     {
         using var document = JsonDocument.Parse(payload);
-        if (HookEvent.Parse(name, document.RootElement, DateTimeOffset.UtcNow) is { } parsed)
-        {
-            sessions.Apply(parsed);
-            hub.Publish();
-            return parsed;
-        }
+        return HookEvent.Parse(name, document.RootElement, DateTimeOffset.UtcNow);
     }
     catch (JsonException)
     {
         // An unreadable payload is already in the log; it just cannot move the state machine.
+        return null;
     }
-
-    return null;
 }

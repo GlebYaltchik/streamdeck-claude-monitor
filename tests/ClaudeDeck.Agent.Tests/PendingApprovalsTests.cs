@@ -1,4 +1,5 @@
 using ClaudeDeck.Agent;
+using ClaudeDeck.Core.Permissions;
 using ClaudeDeck.Core.Sessions;
 
 namespace ClaudeDeck.Agent.Tests;
@@ -16,7 +17,7 @@ public class PendingApprovalsTests
     {
         var sessions = Waiting();
         var changed = 0;
-        var approvals = new PendingApprovals(sessions, TimeSpan.FromMinutes(15), _ => { });
+        var approvals = new PendingApprovals(sessions, new DeckModes(), TimeSpan.FromMinutes(15), _ => { });
         approvals.Changed += () => changed++;
 
         using var abandoned = new CancellationTokenSource();
@@ -37,7 +38,7 @@ public class PendingApprovalsTests
     {
         var sessions = Waiting();
         var changed = 0;
-        var approvals = new PendingApprovals(sessions, TimeSpan.Zero, _ => { });
+        var approvals = new PendingApprovals(sessions, new DeckModes(), TimeSpan.Zero, _ => { });
         approvals.Changed += () => changed++;
 
         await approvals.HoldAsync("session-1", CancellationToken.None);
@@ -45,6 +46,32 @@ public class PendingApprovalsTests
         Assert.Equal(SessionState.WaitingApproval, Only(sessions).State);
         Assert.Equal(0, changed);
     }
+
+    /// <summary>
+    /// The switch design §6.4 asks for, and the reason it exists before anything can decide:
+    /// off means the question is the session's own affair.
+    /// </summary>
+    [Fact]
+    public void Nothing_is_held_while_the_deck_is_off()
+    {
+        var modes = new DeckModes();
+        modes.Set(DeckMode.Off);
+        var approvals = new PendingApprovals(new SessionRegistry(), modes, TimeSpan.Zero, _ => { });
+
+        Assert.False(approvals.Holds(Request("default")));
+    }
+
+    [Fact]
+    public void A_question_nobody_on_the_deck_could_answer_is_not_held()
+    {
+        var approvals = new PendingApprovals(new SessionRegistry(), new DeckModes(), TimeSpan.Zero, _ => { });
+
+        Assert.True(approvals.Holds(Request("default")));
+        Assert.False(approvals.Holds(Request("auto")));
+    }
+
+    private static HookEvent Request(string mode) =>
+        new("PermissionRequest", "session-1", Start, PermissionMode: mode, ToolName: "Bash");
 
     private static SessionRegistry Waiting()
     {
