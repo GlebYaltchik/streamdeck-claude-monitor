@@ -103,6 +103,29 @@
           "TitleAlignment": "middle"
         }
       ]
+    },
+    {
+      "Name": "Pending approval",
+      "UUID": "com.gyaltchik.claudedeck.approval",
+      "Icon": "imgs/key",
+      "Tooltip": "What a session is waiting to be allowed to do.",
+      "Controllers": [
+        "Encoder"
+      ],
+      "Encoder": {
+        "layout": "layouts/approval.json",
+        "TriggerDescription": {
+          "Rotate": "",
+          "Push": "",
+          "Touch": ""
+        }
+      },
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "middle"
+        }
+      ]
     }
   ],
   "UUID": "com.gyaltchik.claudedeck"

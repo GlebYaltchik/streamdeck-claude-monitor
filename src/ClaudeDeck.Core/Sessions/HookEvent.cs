@@ -16,6 +16,7 @@ public sealed record HookEvent(
     string? TranscriptPath = null,
     string? PermissionMode = null,
     string? ToolName = null,
+    string? ToolSummary = null,
     string? Source = null,
     string? Reason = null)
 {
@@ -37,6 +38,9 @@ public sealed record HookEvent(
             TranscriptPath: Read(payload, "transcript_path"),
             PermissionMode: Read(payload, "permission_mode"),
             ToolName: Read(payload, "tool_name"),
+            ToolSummary: payload.TryGetProperty("tool_input", out var toolInput)
+                ? ToolInputs.Summarise(toolInput)
+                : null,
             Source: Read(payload, "source"),
             Reason: Read(payload, "reason"));
     }

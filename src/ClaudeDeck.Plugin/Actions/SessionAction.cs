@@ -372,5 +372,7 @@ internal sealed class SessionAction(
         session.Title,
         session.Project,
         session.ContextPercent,
-        session.ContextEstimated);
+        session.ContextEstimated,
+        session.PendingTool,
+        session.PendingSummary);
 }

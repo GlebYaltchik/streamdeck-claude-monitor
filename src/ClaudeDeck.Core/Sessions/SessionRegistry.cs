@@ -115,7 +115,7 @@ public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
             if (_sessions.TryGetValue(sessionId, out var session) &&
                 session.State == SessionState.WaitingApproval)
             {
-                _sessions[sessionId] = session with { State = SessionState.Working };
+                _sessions[sessionId] = session with { State = SessionState.Working, Pending = null };
             }
         }
     }
@@ -135,7 +135,12 @@ public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
             if (_sessions.TryGetValue(sessionId, out var session) &&
                 session.State is SessionState.Working or SessionState.WaitingApproval)
             {
-                _sessions[sessionId] = session with { State = SessionState.Idle, CurrentTool = null };
+                _sessions[sessionId] = session with
+                {
+                    State = SessionState.Idle,
+                    CurrentTool = null,
+                    Pending = null,
+                };
             }
         }
     }
@@ -202,6 +207,10 @@ public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
             // Only Stop below sets this, so it survives exactly one event.
             AwaitingUser = false,
             LastEventAt = hookEvent.ReceivedAt,
+
+            // A question belongs to the moment it is asked. Anything else happening in the
+            // session means it is no longer the question on the table.
+            Pending = null,
             Cwd = hookEvent.Cwd ?? session.Cwd,
             TranscriptPath = hookEvent.TranscriptPath ?? session.TranscriptPath,
             PermissionMode = hookEvent.PermissionMode ?? session.PermissionMode,
@@ -227,6 +236,9 @@ public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
                 {
                     State = SessionState.WaitingApproval,
                     CurrentTool = hookEvent.ToolName ?? session.CurrentTool,
+                    Pending = new PendingRequest(
+                        hookEvent.ToolName ?? "tool",
+                        hookEvent.ToolSummary),
                 },
 
             // The turn is over, which is exactly "waiting for the user".

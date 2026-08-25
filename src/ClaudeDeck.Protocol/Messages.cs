@@ -50,4 +50,6 @@ public sealed record AgentSession(
     int? ContextTokens = null,
     int? ContextPercent = null,
     bool ContextEstimated = false,
-    bool AwaitingUser = false);
+    bool AwaitingUser = false,
+    string? PendingTool = null,
+    string? PendingSummary = null);

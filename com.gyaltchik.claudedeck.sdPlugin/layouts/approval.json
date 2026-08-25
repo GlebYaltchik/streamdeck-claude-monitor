@@ -1,0 +1,21 @@
+{
+  "id": "approval",
+  "items": [
+    {
+      "key": "title",
+      "type": "text",
+      "rect": [14, 4, 172, 18],
+      "alignment": "left",
+      "color": "#9aa4b2",
+      "font": { "size": 13 }
+    },
+    {
+      "key": "value",
+      "type": "text",
+      "rect": [14, 24, 172, 54],
+      "alignment": "left",
+      "color": "#ffffff",
+      "font": { "size": 15 }
+    }
+  ]
+}

@@ -43,6 +43,7 @@ internal static class Program
         var sessionAction = new SessionAction(connection, hub.Agents, alerts, hub.ForgetSessionAsync);
         var alertAction = new AlertAction(connection, alerts, () => sessionAction.Waiting());
         var modeAction = new ModeAction(connection, modes);
+        var approvalAction = new ApprovalAction(connection, hub.Agents);
         var actions = new IDeckAction[]
         {
             usageAction,
@@ -50,11 +51,13 @@ internal static class Program
             sessionAction,
             alertAction,
             modeAction,
+            approvalAction,
         }.ToDictionary(action => action.Uuid, StringComparer.Ordinal);
 
         hub.Agents.Changed += summaryAction.Refresh;
         hub.Agents.Changed += sessionAction.Refresh;
         hub.Agents.Changed += alertAction.Refresh;
+        hub.Agents.Changed += approvalAction.Refresh;
 
         // Muting has to reach the slots as well as the key that did it.
         alerts.Changed += sessionAction.Refresh;

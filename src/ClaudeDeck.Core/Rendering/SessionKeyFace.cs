@@ -9,7 +9,9 @@ public sealed record SessionSlotFace(
     string? Title,
     string? Project,
     int? ContextPercent,
-    bool ContextEstimated);
+    bool ContextEstimated,
+    string? PendingTool = null,
+    string? PendingSummary = null);
 
 
 /// <summary>
@@ -88,6 +90,9 @@ public static class SessionKeyFace
     /// </summary>
     private const int NameCharacters = 11;
 
+    /// <summary>What fits on one line of a command at 15px. Estimated, like the name above.</summary>
+    private const int CommandCharacters = 17;
+
     /// <summary>A slot with nothing in it: a dash, dim enough to ignore.</summary>
     public static string Empty() =>
         new KeyImage()
@@ -104,6 +109,11 @@ public static class SessionKeyFace
     {
         var image = new KeyImage().Background(Blend(Background(session.State), Lit, attention));
 
+        if (session.State == SessionState.WaitingApproval && session.PendingTool is { Length: > 0 })
+        {
+            return Asking(image, session);
+        }
+
         var lines = Wrap(session.Title ?? session.Project ?? "session");
         var top = lines.Count == 1 ? 56 : 42;
 
@@ -119,6 +129,55 @@ public static class SessionKeyFace
             .Text(Fill(session), 133, 17, KeyPalette.Muted)
             .ToDataUrl();
     }
+
+    /// <summary>
+    /// The face of a session that is being asked something: which session, which tool, and
+    /// as much of what it wants to do as the key can hold.
+    ///
+    /// The command is what changes here and the name is what stays, so the name moves to the
+    /// top in small type and the command takes the room the title and the bar had. The whole
+    /// command is in the session's own window, which is on screen at the same time — the key
+    /// only has to be enough to know which window that is and whether it is worth walking to.
+    /// </summary>
+    private static string Asking(KeyImage image, SessionSlotFace session)
+    {
+        var lines = Wrap(session.Title ?? session.Project ?? "session");
+        var top = lines.Count == 1 ? 44 : 34;
+
+        for (var line = 0; line < lines.Count; line++)
+        {
+            image.Text(lines[line], top + (line * 26), NameSize, KeyPalette.Primary, bold: true);
+        }
+
+        image.Text(Cut(session.PendingTool ?? "tool", 16), 100, 15, KeyPalette.Muted);
+
+        foreach (var (text, y) in Lines(session.PendingSummary).Select((text, index) => (text, 122 + (index * 18))))
+        {
+            image.Text(text, y, 15, KeyPalette.Primary);
+        }
+
+        return image.ToDataUrl();
+    }
+
+    /// <summary>
+    /// The command over at most two lines, cut where it must be. Estimated from the font
+    /// size rather than measured, the same as the name above it: the device is the judge.
+    /// </summary>
+    private static List<string> Lines(string? command)
+    {
+        var text = command?.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            return [];
+        }
+
+        // One line, not two: the second would run off the bottom of the key, and the whole
+        // command is on the touch strip and in the session's own window anyway.
+        return [Cut(text, CommandCharacters)];
+    }
+
+    private static string Cut(string text, int characters) =>
+        text.Length <= characters ? text : text[..(characters - 1)] + "…";
 
     /// <summary>
     /// The percentage, or a dash when nothing is known yet. A trailing <c>?</c> marks a window

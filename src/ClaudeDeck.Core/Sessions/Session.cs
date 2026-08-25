@@ -66,6 +66,12 @@ public sealed record Session
     /// <summary>The git branch, also from the transcript, for a key label.</summary>
     public string? Branch { get; init; }
 
+    /// <summary>
+    /// What the session is asking to be allowed to do, while it is asking. Set with
+    /// <see cref="SessionState.WaitingApproval"/> and gone the moment that state is.
+    /// </summary>
+    public PendingRequest? Pending { get; init; }
+
     /// <summary>How full the context is, once a transcript has said so.</summary>
     public ContextFill? Context { get; init; }
 

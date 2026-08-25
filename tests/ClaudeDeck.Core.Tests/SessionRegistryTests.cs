@@ -50,14 +50,17 @@ public class SessionRegistryTests
         var registry = Started();
         registry.Apply(Event("UserPromptSubmit"));
         registry.Apply(Event("PreToolUse", tool: "Bash"));
-        registry.Apply(Event("PermissionRequest", tool: "Bash", mode: "default"));
+        registry.Apply(Event("PermissionRequest", tool: "Bash", mode: "default", summary: "git push --force"));
 
         var session = Only(registry);
         Assert.Equal(SessionState.WaitingApproval, session.State);
         Assert.Equal("Bash", session.CurrentTool);
+        Assert.Equal("Bash", session.Pending?.Tool);
+        Assert.Equal("git push --force", session.Pending?.Summary);
 
         registry.ClearApproval("session-1");
         Assert.Equal(SessionState.Working, Only(registry).State);
+        Assert.Null(Only(registry).Pending);
     }
 
     /// <summary>
@@ -306,6 +309,7 @@ public class SessionRegistryTests
         string? reason = null,
         string? cwd = null,
         string? transcript = null,
-        string? mode = null) =>
-        new(name, session, Start, cwd, transcript, mode, tool, source, reason);
+        string? mode = null,
+        string? summary = null) =>
+        new(name, session, Start, cwd, transcript, mode, tool, summary, source, reason);
 }
