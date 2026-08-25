@@ -1,5 +1,5 @@
 {
-  "_comment": "Sends Claude Code hook events to the local ClaudeDeck agent. The agent replies 204 with no body, so nothing here influences a session. A short connect timeout keeps the cost of a stopped agent at roughly one curl startup. Notification is deliberately absent: it was measured never to fire, see docs/findings/hooks.md.",
+  "_comment": "Sends Claude Code hook events to the local ClaudeDeck agent. Every event but one is answered 204 with no body, so nothing here influences a session. PermissionRequest is held open by the agent while its question is on screen: the client closes the connection when the question is answered, which is the only signal that says so. Notification is deliberately absent: it was measured never to fire, see docs/findings/hooks.md.",
   "hooks": {
     "SessionStart": [
       {
@@ -31,6 +31,18 @@
             "type": "command",
             "command": "curl -s --connect-timeout 0.1 --max-time 2 -X POST --data-binary \"@-\" http://127.0.0.1:17800/hook/PreToolUse",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:17800/hook/PermissionRequest",
+            "timeout": 3600
           }
         ]
       }

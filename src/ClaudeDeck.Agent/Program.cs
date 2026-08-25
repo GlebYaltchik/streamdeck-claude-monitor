@@ -8,10 +8,16 @@ using ClaudeDeck.Protocol;
 // current state of every live session. It decides nothing: every response is empty, so a
 // session behaves exactly as it would without it.
 //
+// A permission question is the one event it does not answer at once. That request is held
+// open while the question is on screen, because the client closes it when the question is
+// answered, and that close is the only thing that says so.
+//
 // It also follows each session's transcript for how full its context is, and reports the
 // lot to the hub inside the plugin, while working the same way when the hub is not there.
 
 const int DefaultPort = 17800;
+
+const string PermissionRequest = "PermissionRequest";
 
 var port = Environment.GetEnvironmentVariable("CLAUDEDECK_AGENT_PORT") is { } configured &&
            int.TryParse(configured, out var parsed)
@@ -22,8 +28,14 @@ var port = Environment.GetEnvironmentVariable("CLAUDEDECK_AGENT_PORT") is { } co
 // is merely idle looks exactly like one whose terminal was closed. Short enough to be worth
 // having, long enough not to grey out a session its owner is still thinking about, and
 // overridable so either can be cut to seconds when testing on the device.
-var staleAfter = Silence("CLAUDEDECK_STALE_AFTER_MINUTES", 120);
-var forgetAfter = Silence("CLAUDEDECK_FORGET_AFTER_MINUTES", 720);
+var staleAfter = Minutes("CLAUDEDECK_STALE_AFTER_MINUTES", 120);
+var forgetAfter = Minutes("CLAUDEDECK_FORGET_AFTER_MINUTES", 720);
+
+// How long a permission question is held open. Long, because holding costs nothing while the
+// question is on screen anyway, and because a connection dropped inside the hold is the only
+// thing that tells us the question was answered. It must stay well under the hook's own
+// timeout in settings, or a client giving up would look exactly like an answer.
+var approvalHold = Minutes("CLAUDEDECK_APPROVAL_HOLD_MINUTES", 15);
 
 var events = new EventLog();
 var sessions = new SessionRegistry();
@@ -32,6 +44,8 @@ var context = new ContextTracker(sessions, Console.WriteLine);
 context.Changed += hub.Publish;
 var liveness = new LivenessMonitor(sessions, staleAfter, forgetAfter, Console.WriteLine);
 liveness.Changed += hub.Publish;
+var approvals = new PendingApprovals(sessions, approvalHold, Console.WriteLine);
+approvals.Changed += hub.Publish;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
@@ -63,19 +77,29 @@ app.MapGet("/sessions", () => Results.Ok(sessions.Snapshot().Select(session => n
     awaitingUser = session.AwaitingUser,
 })));
 
-app.MapPost("/hook/{hookEvent}", async (string hookEvent, HttpRequest request) =>
+app.MapPost("/hook/{hookEvent}", async (string hookEvent, HttpRequest request, CancellationToken abandoned) =>
 {
     using var reader = new StreamReader(request.Body);
-    var payload = await reader.ReadToEndAsync();
+    var payload = await reader.ReadToEndAsync(abandoned);
 
+    HookEvent? tracked = null;
     try
     {
         events.Append(hookEvent, payload);
-        Track(hookEvent, payload);
+        tracked = Track(hookEvent, payload);
     }
     catch (Exception ex)
     {
         Console.Error.WriteLine($"could not handle {hookEvent}: {ex.Message}");
+    }
+
+    // A permission question is held open while it is on screen, which is how the agent
+    // learns it was answered: the client drops the connection when it is. Held only where
+    // an answer from outside would count — elsewhere it would stall a session for nothing.
+    if (tracked is { Name: PermissionRequest } &&
+        PermissionModes.AnswerableFromOutside(tracked.PermissionMode))
+    {
+        await approvals.HoldAsync(tracked.SessionId, abandoned);
     }
 
     // No content, so the hook sees empty output and forms no opinion about the tool call.
@@ -95,7 +119,7 @@ app.Run();
 await Task.WhenAll(reporting, tracking, watching);
 return;
 
-static TimeSpan Silence(string variable, int fallbackMinutes) =>
+static TimeSpan Minutes(string variable, int fallbackMinutes) =>
     TimeSpan.FromMinutes(
         Environment.GetEnvironmentVariable(variable) is { } value &&
         double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var minutes) &&
@@ -103,7 +127,7 @@ static TimeSpan Silence(string variable, int fallbackMinutes) =>
             ? minutes
             : fallbackMinutes);
 
-void Track(string name, string payload)
+HookEvent? Track(string name, string payload)
 {
     try
     {
@@ -112,10 +136,13 @@ void Track(string name, string payload)
         {
             sessions.Apply(parsed);
             hub.Publish();
+            return parsed;
         }
     }
     catch (JsonException)
     {
         // An unreadable payload is already in the log; it just cannot move the state machine.
     }
+
+    return null;
 }

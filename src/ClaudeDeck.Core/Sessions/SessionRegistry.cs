@@ -13,6 +13,10 @@ namespace ClaudeDeck.Core.Sessions;
 /// - <c>SubagentStop</c> belongs to its parent session and never creates one;
 /// - <c>Notification</c> is not handled at all, because it does not fire for permission
 ///   prompts, which is the only thing it would have been used for.
+///
+/// <c>PermissionRequest</c> is what fires for those instead, and it is the one state the
+/// registry cannot leave on its own: nothing announces that a question was answered, so the
+/// agent says so with <see cref="ClearApproval"/> when the client drops the held request.
 /// </summary>
 public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
 {
@@ -92,6 +96,26 @@ public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
     }
 
     /// <summary>
+    /// The permission question is answered, wherever it was answered. The turn carries on,
+    /// so the session goes back to working: a denial is a tool result like any other.
+    ///
+    /// Only a session actually waiting is touched. The question can outlive our knowledge of
+    /// it — we learn of an answer only while holding the request open — and a session that
+    /// has moved on by itself must not be dragged back.
+    /// </summary>
+    public void ClearApproval(string sessionId)
+    {
+        lock (_gate)
+        {
+            if (_sessions.TryGetValue(sessionId, out var session) &&
+                session.State == SessionState.WaitingApproval)
+            {
+                _sessions[sessionId] = session with { State = SessionState.Working };
+            }
+        }
+    }
+
+    /// <summary>
     /// Marks a session as showing no sign of life. Not a removal: it may still be sitting in
     /// an open terminal with nothing to do, and its next event takes the mark off again.
     /// </summary>
@@ -167,6 +191,18 @@ public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
             "UserPromptSubmit" => updated with { State = SessionState.Working },
             "PreToolUse" => updated with { State = SessionState.Working, CurrentTool = hookEvent.ToolName },
             "PostToolUse" => updated with { State = SessionState.Working, CurrentTool = null },
+
+            // Claude Code is about to ask, so the session is now waiting on a person and
+            // says so itself. Cleared by ClearApproval when the question is answered.
+            //
+            // Only in a mode where an answer from outside would count. In the others the
+            // event fires but the client decides on its own, and nobody is being waited for.
+            "PermissionRequest" when PermissionModes.AnswerableFromOutside(updated.PermissionMode) =>
+                updated with
+                {
+                    State = SessionState.WaitingApproval,
+                    CurrentTool = hookEvent.ToolName ?? session.CurrentTool,
+                },
 
             // The turn is over, which is exactly "waiting for the user".
             "Stop" => updated with { State = SessionState.Idle, CurrentTool = null, AwaitingUser = true },

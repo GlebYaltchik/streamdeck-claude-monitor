@@ -39,6 +39,58 @@ public class SessionRegistryTests
         Assert.Equal(SessionState.Working, Only(registry).State);
     }
 
+    /// <summary>
+    /// PermissionRequest fires only when Claude Code is about to ask, so the session is
+    /// waiting on a person from that moment. Nothing announces the answer, which is why the
+    /// state has to be taken off explicitly.
+    /// </summary>
+    [Fact]
+    public void A_permission_request_leaves_the_session_waiting()
+    {
+        var registry = Started();
+        registry.Apply(Event("UserPromptSubmit"));
+        registry.Apply(Event("PreToolUse", tool: "Bash"));
+        registry.Apply(Event("PermissionRequest", tool: "Bash", mode: "default"));
+
+        var session = Only(registry);
+        Assert.Equal(SessionState.WaitingApproval, session.State);
+        Assert.Equal("Bash", session.CurrentTool);
+
+        registry.ClearApproval("session-1");
+        Assert.Equal(SessionState.Working, Only(registry).State);
+    }
+
+    /// <summary>
+    /// In a mode that ignores an outside decision the client answers by itself, so nobody is
+    /// being waited for and holding the request would only stall the session.
+    /// </summary>
+    [Fact]
+    public void A_permission_request_in_auto_mode_waits_for_nobody()
+    {
+        var registry = Started();
+        registry.Apply(Event("UserPromptSubmit"));
+        registry.Apply(Event("PermissionRequest", tool: "Bash", mode: "auto"));
+
+        Assert.Equal(SessionState.Working, Only(registry).State);
+    }
+
+    /// <summary>
+    /// The question can outlive our knowledge of it, so a session that has moved on by
+    /// itself must not be dragged back to working.
+    /// </summary>
+    [Fact]
+    public void Clearing_an_approval_touches_only_a_session_that_is_waiting()
+    {
+        var registry = Started();
+        registry.Apply(Event("Stop"));
+
+        registry.ClearApproval("session-1");
+
+        var session = Only(registry);
+        Assert.Equal(SessionState.Idle, session.State);
+        Assert.True(session.AwaitingUser);
+    }
+
     [Fact]
     public void Stop_means_the_user_is_being_waited_for()
     {
