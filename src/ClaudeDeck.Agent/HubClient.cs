@@ -15,6 +15,7 @@ namespace ClaudeDeck.Agent;
 internal sealed class HubClient(
     SessionRegistry sessions,
     DeckModes modes,
+    Func<string, ApprovalDecision, bool> decide,
     string? token,
     Action<string> log)
 {
@@ -174,6 +175,17 @@ internal sealed class HubClient(
             case HubProtocol.Mode when envelope.PayloadAs<ModeUpdate>() is { Mode.Length: > 0 } update:
                 modes.Set(DeckModes.Parse(update.Mode));
                 log($"deck is {DeckModes.Name(modes.Current)}");
+                break;
+
+            case HubProtocol.Decide when envelope.PayloadAs<DecideRequest>() is { SessionId.Length: > 0 } request:
+                if (!decide(request.SessionId, new ApprovalDecision(request.Behaviour, request.Message)))
+                {
+                    // The session answered for itself a moment earlier. Nothing to do, and
+                    // nothing wrong: the deck is one of two ways to answer, not the only one.
+                    log($"nothing was waiting in {request.SessionId}");
+                }
+
+                Publish();
                 break;
         }
     }

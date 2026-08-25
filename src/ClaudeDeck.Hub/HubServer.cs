@@ -79,6 +79,23 @@ public sealed class HubServer : IAsyncDisposable
     }
 
     /// <summary>
+    /// Answers the permission question a session is waiting on. Returns whether it reached an
+    /// agent at all — false when nobody claims the session, which is what a key press finds
+    /// when the question was answered in its own window a moment earlier.
+    /// </summary>
+    public async Task<bool> DecideAsync(string sessionId, string behaviour, string? message)
+    {
+        if (Agents.ConnectionFor(sessionId) is not { } connection ||
+            !_links.TryGetValue(connection, out var link))
+        {
+            return false;
+        }
+
+        return await link.SendAsync(
+            Envelope.Write(HubProtocol.Decide, new DecideRequest(sessionId, behaviour, message)));
+    }
+
+    /// <summary>
     /// Tells every connected agent how far the deck is allowed in. Failures are ignored on
     /// purpose: an agent that has just gone is told again when it comes back.
     /// </summary>

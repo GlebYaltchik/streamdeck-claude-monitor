@@ -9,6 +9,33 @@ public class HubServerTests
     /// The switch has to reach the agents to be a switch at all: with the deck off they stop
     /// holding permission questions open.
     /// </summary>
+    /// <summary>
+    /// The answer has to reach the agent holding that session's question, and no other.
+    /// </summary>
+    [Fact]
+    public async Task A_decision_reaches_the_agent_that_reported_the_session()
+    {
+        await using var hub = new HubUnderTest();
+        using var agent = await hub.ConnectAgentAsync();
+        await Report(hub, agent, "session-1");
+
+        Assert.True(await hub.Server.DecideAsync("session-1", "deny", "no"));
+
+        var sent = await HubUnderTest.ReceiveAsync(agent);
+        Assert.Equal(HubProtocol.Decide, sent?.Type);
+        Assert.Equal("session-1", sent?.PayloadAs<DecideRequest>()?.SessionId);
+        Assert.Equal("deny", sent?.PayloadAs<DecideRequest>()?.Behaviour);
+    }
+
+    [Fact]
+    public async Task A_decision_for_a_session_nobody_claims_reaches_nobody()
+    {
+        await using var hub = new HubUnderTest();
+        using var agent = await hub.ConnectAgentAsync();
+
+        Assert.False(await hub.Server.DecideAsync("nobody", "deny", "no"));
+    }
+
     [Fact]
     public async Task A_change_of_mode_reaches_a_connected_agent()
     {

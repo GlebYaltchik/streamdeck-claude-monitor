@@ -41,12 +41,12 @@ var approvalHold = Minutes("CLAUDEDECK_APPROVAL_HOLD_MINUTES", 15);
 var events = new EventLog();
 var sessions = new SessionRegistry();
 var modes = new DeckModes();
-var hub = new HubClient(sessions, modes, HubToken.Read(), Console.WriteLine);
+var approvals = new PendingApprovals(sessions, modes, approvalHold, Console.WriteLine);
+var hub = new HubClient(sessions, modes, approvals.Resolve, HubToken.Read(), Console.WriteLine);
 var context = new ContextTracker(sessions, Console.WriteLine);
 context.Changed += hub.Publish;
 var liveness = new LivenessMonitor(sessions, staleAfter, forgetAfter, Console.WriteLine);
 liveness.Changed += hub.Publish;
-var approvals = new PendingApprovals(sessions, modes, approvalHold, Console.WriteLine);
 approvals.Changed += hub.Publish;
 
 var builder = WebApplication.CreateSlimBuilder(args);
@@ -109,7 +109,10 @@ app.MapPost("/hook/{hookEvent}", async (string hookEvent, HttpRequest request, C
     // learns it was answered: the client drops the connection when it is.
     if (tracked is not null && approvals.Holds(tracked))
     {
-        await approvals.HoldAsync(tracked.SessionId, abandoned);
+        if (await approvals.HoldAsync(tracked.SessionId, abandoned) is { } decision)
+        {
+            return Results.Text(decision.ToHookOutput(), "application/json");
+        }
     }
 
     // No content, so the hook sees empty output and forms no opinion about the tool call.

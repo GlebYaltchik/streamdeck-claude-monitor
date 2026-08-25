@@ -1,10 +1,12 @@
+using System.Collections.Concurrent;
 using ClaudeDeck.Core.Permissions;
 using ClaudeDeck.Core.Sessions;
 
 namespace ClaudeDeck.Agent;
 
 /// <summary>
-/// Keeps a permission request open for as long as its question is on screen.
+/// Keeps a permission request open for as long as its question is on screen, and answers it
+/// if the deck says so.
 ///
 /// Measured behaviour this rests on (findings/holding-a-hook.md): the session shows its own
 /// prompt while a <c>PermissionRequest</c> hook is still running, and the client closes the
@@ -17,8 +19,7 @@ namespace ClaudeDeck.Agent;
 /// the hold runs out first the session is left marked as waiting: at that point we no longer
 /// know, and the last thing we did know was that somebody was being asked.
 ///
-/// Nothing here decides anything yet. The request is released with no opinion either way,
-/// which leaves the session behaving exactly as it would without the agent.
+/// One question per session, because a session waiting on one is not running anything else.
 /// </summary>
 internal sealed class PendingApprovals(
     SessionRegistry sessions,
@@ -26,6 +27,9 @@ internal sealed class PendingApprovals(
     TimeSpan hold,
     Action<string> log)
 {
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<ApprovalDecision?>> _waiting =
+        new(StringComparer.Ordinal);
+
     /// <summary>Raised when a held request ends, so the deck stops showing it.</summary>
     public event Action? Changed;
 
@@ -39,18 +43,54 @@ internal sealed class PendingApprovals(
         modes.Current != DeckMode.Off &&
         PermissionModes.AnswerableFromOutside(hookEvent.PermissionMode);
 
-    public async Task HoldAsync(string sessionId, CancellationToken abandoned)
+    /// <summary>
+    /// Waits for an answer from the deck, for the session to answer for itself, or for the
+    /// hold to run out. Returns what to print, and null for "no opinion" — which leaves the
+    /// session exactly as it would be without the agent.
+    /// </summary>
+    public async Task<ApprovalDecision?> HoldAsync(string sessionId, CancellationToken abandoned)
     {
+        var answer = new TaskCompletionSource<ApprovalDecision?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _waiting[sessionId] = answer;
+
         try
         {
-            await Task.Delay(hold, abandoned);
+            // Three ways this ends, and they are told apart by which task finished rather
+            // than by an exception: a cancelled Task.Delay inside WhenAny does not throw.
+            var finished = await Task.WhenAny(answer.Task, Task.Delay(hold, abandoned));
+
+            if (finished == answer.Task)
+            {
+                var decision = await answer.Task;
+                log($"permission request in {sessionId} answered on the deck: {decision?.Behaviour}");
+                sessions.ClearApproval(sessionId);
+                Changed?.Invoke();
+                return decision;
+            }
+
+            if (abandoned.IsCancellationRequested)
+            {
+                log($"permission request in {sessionId} was answered in the session");
+                sessions.ClearApproval(sessionId);
+                Changed?.Invoke();
+                return null;
+            }
+
             log($"permission request in {sessionId} outlived the hold, still marked waiting");
         }
-        catch (OperationCanceledException)
+        finally
         {
-            log($"permission request in {sessionId} was answered in the session");
-            sessions.ClearApproval(sessionId);
-            Changed?.Invoke();
+            _waiting.TryRemove(sessionId, out _);
         }
+
+        return null;
     }
+
+    /// <summary>
+    /// The deck's answer. Ignored when the session is no longer waiting on us — it may have
+    /// been answered in its own window a moment earlier, and a key press that arrives late
+    /// must do nothing rather than something.
+    /// </summary>
+    public bool Resolve(string sessionId, ApprovalDecision decision) =>
+        _waiting.TryGetValue(sessionId, out var answer) && answer.TrySetResult(decision);
 }

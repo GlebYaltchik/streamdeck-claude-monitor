@@ -48,6 +48,39 @@ public class PendingApprovalsTests
     }
 
     /// <summary>
+    /// The answer from the deck reaches the held request, and the session stops waiting.
+    /// </summary>
+    [Fact]
+    public async Task An_answer_from_the_deck_is_what_the_hook_prints()
+    {
+        var sessions = Waiting();
+        var approvals = new PendingApprovals(sessions, new DeckModes(), TimeSpan.FromMinutes(15), _ => { });
+
+        var holding = approvals.HoldAsync("session-1", CancellationToken.None);
+        while (!approvals.Resolve("session-1", ApprovalDecision.Denied()))
+        {
+            await Task.Delay(5);
+        }
+
+        var decision = await holding;
+
+        Assert.Equal(ApprovalDecision.Deny, decision?.Behaviour);
+        Assert.Equal(SessionState.Working, Only(sessions).State);
+    }
+
+    /// <summary>
+    /// A key press that arrives after the session answered for itself must do nothing. The
+    /// deck is one of two ways to answer, and the slower one loses.
+    /// </summary>
+    [Fact]
+    public void An_answer_for_a_session_that_is_no_longer_waiting_does_nothing()
+    {
+        var approvals = new PendingApprovals(new SessionRegistry(), new DeckModes(), TimeSpan.Zero, _ => { });
+
+        Assert.False(approvals.Resolve("session-1", ApprovalDecision.Denied()));
+    }
+
+    /// <summary>
     /// The switch design §6.4 asks for, and the reason it exists before anything can decide:
     /// off means the question is the session's own affair.
     /// </summary>

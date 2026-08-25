@@ -1,5 +1,4 @@
 using ClaudeDeck.Core.Rendering;
-using ClaudeDeck.Hub;
 
 namespace ClaudeDeck.Plugin.Actions;
 
@@ -11,7 +10,7 @@ namespace ClaudeDeck.Plugin.Actions;
 /// any key can answer — a deck that can decide before it can show what it is deciding about
 /// is the thing design §6.4 exists to prevent.
 /// </summary>
-internal sealed class ApprovalAction(IDeckConnection connection, AgentRegistry agents) : IDeckAction
+internal sealed class ApprovalAction(IDeckConnection connection, PendingQueue queue) : IDeckAction
 {
     private readonly HashSet<string> _contexts = new(StringComparer.Ordinal);
     private readonly Lock _gate = new();
@@ -52,11 +51,7 @@ internal sealed class ApprovalAction(IDeckConnection connection, AgentRegistry a
     /// <summary>Redraws every visible strip. Safe to call from the hub's own threads.</summary>
     public void Refresh()
     {
-        var asking = agents.Snapshot()
-            .SelectMany(agent => agent.Sessions)
-            .Where(session => session.PendingTool is { Length: > 0 })
-            .OrderBy(session => session.LastEventAt)
-            .FirstOrDefault();
+        var asking = queue.Current();
 
         var strip = ApprovalStrip.Render(asking?.Title, asking?.PendingTool);
 

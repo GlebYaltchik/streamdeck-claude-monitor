@@ -28,6 +28,13 @@ public sealed record ForgetSession(string SessionId);
 public sealed record ModeUpdate(string Mode);
 
 /// <summary>
+/// Hub to agent: answer the question this session is waiting on. <c>Behaviour</c> carries the
+/// client's own word for it, <c>allow</c> or <c>deny</c>, and a message rides along with a
+/// denial so the model is told why.
+/// </summary>
+public sealed record DecideRequest(string SessionId, string Behaviour, string? Message);
+
+/// <summary>
 /// A session as it crosses the wire. Deliberately not the agent's own record: the hub is
 /// given what a key has to draw, and gains no opinion about the agent's internals.
 ///
