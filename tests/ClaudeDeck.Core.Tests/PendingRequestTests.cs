@@ -55,15 +55,20 @@ public class PendingRequestTests
         Assert.Contains("git push", svg);
     }
 
+    /// <summary>
+    /// The strip says who, not what. Measured on the device: a command at a size that fits
+    /// one dial's segment cannot be read at arm's length, and half a command is worse than
+    /// none.
+    /// </summary>
     [Fact]
-    public void The_strip_says_so_when_nothing_is_waiting()
+    public void The_strip_names_the_session_and_not_the_command()
     {
-        var idle = ApprovalStrip.Render(null, null, null);
-        Assert.Equal("nothing waiting", idle.Value);
+        var idle = ApprovalStrip.Render(null, null);
+        Assert.Equal("none waiting", idle.Value);
 
-        var asking = ApprovalStrip.Render("deck plugin", "Bash", "git push --force");
-        Assert.Equal("Bash · deck plugin", asking.Title);
-        Assert.Equal("git push --force", asking.Value);
+        var asking = ApprovalStrip.Render("deck plugin", "Bash");
+        Assert.Equal("APPROVALS · Bash", asking.Title);
+        Assert.Equal("deck plugin", asking.Value);
     }
 
     private static string? Summarise(string toolInput) =>

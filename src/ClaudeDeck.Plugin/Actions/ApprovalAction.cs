@@ -58,7 +58,7 @@ internal sealed class ApprovalAction(IDeckConnection connection, AgentRegistry a
             .OrderBy(session => session.LastEventAt)
             .FirstOrDefault();
 
-        var strip = ApprovalStrip.Render(asking?.Title, asking?.PendingTool, asking?.PendingSummary);
+        var strip = ApprovalStrip.Render(asking?.Title, asking?.PendingTool);
 
         foreach (var context in Contexts())
         {

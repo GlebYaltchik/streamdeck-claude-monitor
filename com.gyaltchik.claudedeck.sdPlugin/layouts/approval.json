@@ -12,10 +12,10 @@
     {
       "key": "value",
       "type": "text",
-      "rect": [14, 24, 172, 54],
+      "rect": [14, 26, 172, 40],
       "alignment": "left",
       "color": "#ffffff",
-      "font": { "size": 15 }
+      "font": { "size": 26, "weight": 700 }
     }
   ]
 }

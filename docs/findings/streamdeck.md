@@ -54,6 +54,21 @@ Design §8 budgets updates at about 4 Hz with a dirty flag per key. This measure
 from a precaution into a requirement: a single fast spin will otherwise saturate the
 connection, and the same applies to any state that changes rapidly.
 
+## The touch strip cannot carry a command
+
+Measured with a real permission request on the device. One dial's segment of the strip is
+about 200 px wide, and the `$B1`-style layout gives it a title line and a value line. A
+command drawn at 15 px fitted roughly two dozen characters and was reported unreadable at
+arm's length; a title at 13 px was cut mid-word.
+
+So a command does not go on the strip, and the conclusion is not "use a smaller font": half a
+command is worse than none, because the half that survives can change what the rest of it
+meant — `rm -rf build` and `rm -rf build /` differ by two characters.
+
+The strip therefore answers **who** is waiting, the key answers **what** in one cut line, and
+the command stays readable in full where it already is: the session's own prompt, which is on
+screen the whole time the deck is asking.
+
 ## `setImage` does not animate
 
 Measured while looking for a way to make a slot ask for attention without redrawing it.

@@ -4,25 +4,27 @@ namespace ClaudeDeck.Core.Rendering;
 public sealed record ApprovalStripFace(string Title, string Value);
 
 /// <summary>
-/// Draws the pending question on an encoder's touch strip.
+/// Draws who is waiting on an encoder's touch strip.
 ///
-/// The strip is where the command goes in full, because it is the widest surface the deck
-/// has and the key beside it has room for two short lines at most. It is not the only place
-/// the command can be read — the session's own prompt is on screen the whole time — so the
-/// strip is what says which session to walk to, not the last word on what it asked.
+/// The command is deliberately not here. The strip was tried with it and rejected on the
+/// device: one dial's segment holds about two dozen characters, and at a size that fits them
+/// nothing is readable at arm's length. A command that has to be cut in half is worse than
+/// no command, because the half that survives can change what the rest of it meant.
+///
+/// So the strip answers "who", the key answers "what", and the whole command stays where it
+/// already is in full — in the session's own window, on screen the entire time.
 /// </summary>
 public static class ApprovalStrip
 {
     private const string Idle = "APPROVALS";
 
-    public static ApprovalStripFace Render(string? session, string? tool, string? summary)
+    public static ApprovalStripFace Render(string? session, string? tool)
     {
         if (tool is not { Length: > 0 })
         {
-            return new ApprovalStripFace(Idle, "nothing waiting");
+            return new ApprovalStripFace(Idle, "none waiting");
         }
 
-        var name = session is { Length: > 0 } ? session : "session";
-        return new ApprovalStripFace($"{tool} · {name}", summary is { Length: > 0 } ? summary : tool);
+        return new ApprovalStripFace($"{Idle} · {tool}", session is { Length: > 0 } ? session : "session");
     }
 }
