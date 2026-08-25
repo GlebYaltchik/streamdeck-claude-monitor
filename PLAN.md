@@ -206,9 +206,8 @@ rests on measurements rather than assumptions:
 
 ## Later phases
 
-- **Approve/deny.** The rule predictor (design §6.3), three answers with console parity, the
-  "Allow always" store with revocation, danger classification, long press, and §6.4 in full.
-  Broken into steps once session monitoring is standing.
+- **Approve/deny.** Broken into steps now that session monitoring is standing:
+  [PLAN-PHASE-4.md](PLAN-PHASE-4.md).
 - **WSL and remote.** The NativeAOT hook shim replacing `curl`, `claudedeck agent install`
   — which **must tell the user that hook changes require a session restart** — and the SSH
   tunnel for remote machines.
