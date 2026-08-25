@@ -78,6 +78,14 @@ internal sealed class ContextTracker(SessionRegistry sessions, Action<string> lo
 
             var reading = reader.Read();
 
+            // A turn cut short is not a reading and does not compete with one: a denied tool
+            // call ends the turn without a hook, so this is where the session stops working.
+            if (reader.TakeInterruption())
+            {
+                sessions.Interrupt(session.Id);
+                changed = true;
+            }
+
             if (reading is null)
             {
                 // A compaction drops the reading. Saying nothing would leave the old number

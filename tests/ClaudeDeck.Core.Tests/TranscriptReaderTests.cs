@@ -169,6 +169,39 @@ public class TranscriptReaderTests : IDisposable
             compactMetadata = new { trigger = "manual", preTokens = 42_701 },
         });
 
+    /// <summary>
+    /// The only trace a denied tool call leaves: no hook fires for it, and the turn ends
+    /// where it stands. Taken rather than read, because the session goes idle once.
+    /// </summary>
+    [Fact]
+    public void An_interrupted_turn_is_reported_once()
+    {
+        var path = Write("interrupted.jsonl", """
+            {"type":"assistant","message":{"model":"claude-opus-5","usage":{"input_tokens":10}}}
+            {"type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user for tool use]"}]}}
+            """);
+        var reader = new TranscriptReader(path);
+
+        reader.Read();
+
+        Assert.True(reader.TakeInterruption());
+        Assert.False(reader.TakeInterruption());
+    }
+
+    [Fact]
+    public void An_ordinary_turn_reports_no_interruption()
+    {
+        var path = Write("plain.jsonl", """
+            {"type":"user","message":{"role":"user","content":[{"type":"text","text":"run the tests"}]}}
+            {"type":"assistant","message":{"model":"claude-opus-5","usage":{"input_tokens":10}}}
+            """);
+        var reader = new TranscriptReader(path);
+
+        reader.Read();
+
+        Assert.False(reader.TakeInterruption());
+    }
+
     private string Write(string name, string content)
     {
         Directory.CreateDirectory(_directory);

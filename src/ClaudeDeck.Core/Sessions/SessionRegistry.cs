@@ -17,6 +17,11 @@ namespace ClaudeDeck.Core.Sessions;
 /// <c>PermissionRequest</c> is what fires for those instead, and it is the one state the
 /// registry cannot leave on its own: nothing announces that a question was answered, so the
 /// agent says so with <see cref="ClearApproval"/> when the client drops the held request.
+///
+/// Which way it was answered is not in any hook. A person answering no interrupts the turn
+/// outright — no tool result and no <c>Stop</c> — and <c>PermissionDenied</c> fires only for
+/// auto mode, both measured. The interruption shows in the transcript and nowhere else, so
+/// it arrives here through <see cref="Interrupt"/>.
 /// </summary>
 public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
 {
@@ -111,6 +116,26 @@ public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
                 session.State == SessionState.WaitingApproval)
             {
                 _sessions[sessionId] = session with { State = SessionState.Working };
+            }
+        }
+    }
+
+    /// <summary>
+    /// The turn was cut short: the user denied a tool call, or pressed escape. Measured on
+    /// the device — neither fires a hook of any kind, and no <c>Stop</c> follows, so a
+    /// session left like this would sit marked as working until it was asked something new.
+    ///
+    /// It goes idle without asking to be looked at. Whoever interrupted the turn was there
+    /// when they did it, and does not need the deck to tell them about it.
+    /// </summary>
+    public void Interrupt(string sessionId)
+    {
+        lock (_gate)
+        {
+            if (_sessions.TryGetValue(sessionId, out var session) &&
+                session.State is SessionState.Working or SessionState.WaitingApproval)
+            {
+                _sessions[sessionId] = session with { State = SessionState.Idle, CurrentTool = null };
             }
         }
     }

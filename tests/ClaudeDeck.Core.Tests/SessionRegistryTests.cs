@@ -61,6 +61,38 @@ public class SessionRegistryTests
     }
 
     /// <summary>
+    /// Measured on the device: answering no in the session interrupts the turn — no tool
+    /// result, no Stop, and no hook of any kind — so nothing else would take the session out
+    /// of working. The transcript is where it shows, and Interrupt is how it arrives.
+    /// </summary>
+    [Fact]
+    public void An_interrupted_turn_leaves_the_session_idle()
+    {
+        var registry = Started();
+        registry.Apply(Event("UserPromptSubmit"));
+        registry.Apply(Event("PermissionRequest", tool: "Bash", mode: "default"));
+
+        registry.Interrupt("session-1");
+
+        var session = Only(registry);
+        Assert.Equal(SessionState.Idle, session.State);
+        Assert.Null(session.CurrentTool);
+        Assert.False(session.AwaitingUser);
+    }
+
+    /// <summary>A session that is not mid-turn has nothing to interrupt.</summary>
+    [Fact]
+    public void Interrupting_an_idle_session_changes_nothing()
+    {
+        var registry = Started();
+        registry.Apply(Event("Stop"));
+
+        registry.Interrupt("session-1");
+
+        Assert.True(Only(registry).AwaitingUser);
+    }
+
+    /// <summary>
     /// In a mode that ignores an outside decision the client answers by itself, so nobody is
     /// being waited for and holding the request would only stall the session.
     /// </summary>

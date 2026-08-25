@@ -27,6 +27,13 @@ public sealed class TranscriptReader(string path)
 {
     private const int ChunkSize = 64 * 1024;
 
+    /// <summary>
+    /// What the client writes into the transcript when a turn is cut short. It continues
+    /// "for tool use" after a denied permission and stops there after a plain escape, so
+    /// only the common part is matched.
+    /// </summary>
+    private const string InterruptionMarker = "[Request interrupted by user";
+
     /// <summary>Where the next pass starts. Exposed so a test can prove nothing is re-read.</summary>
     public long Offset { get; private set; }
 
@@ -39,6 +46,21 @@ public sealed class TranscriptReader(string path)
 
     private TranscriptReading? _usage;
     private string? _title;
+    private bool _interrupted;
+
+    /// <summary>
+    /// Whether the turn was cut short since this was last asked, and clears the mark.
+    ///
+    /// Taken rather than read because it is an event, not a state: the session goes idle
+    /// once, and the next turn starts from nothing. Measured on the device — denying a tool
+    /// call or pressing escape fires no hook at all, so this record is the only trace.
+    /// </summary>
+    public bool TakeInterruption()
+    {
+        var interrupted = _interrupted;
+        _interrupted = false;
+        return interrupted;
+    }
 
     /// <summary>
     /// Consumes whatever has been appended since the last call. Returns the newest reading,
@@ -84,6 +106,7 @@ public sealed class TranscriptReader(string path)
         Offset = 0;
         _usage = null;
         _title = null;
+        _interrupted = false;
     }
 
     /// <summary>
@@ -147,6 +170,14 @@ public sealed class TranscriptReader(string path)
                 return;
             }
 
+            // The client writes this when the user denies a tool call or presses escape.
+            // Both end the turn where it stands, and neither is announced any other way.
+            if (type == "user" && Interrupted(record))
+            {
+                _interrupted = true;
+                return;
+            }
+
             // Two record types name a session: the one the user set and the one Claude wrote.
             // Whichever came last is its current name.
             if ((Read(record, "customTitle") ?? Read(record, "aiTitle")) is { Length: > 0 } title)
@@ -181,6 +212,15 @@ public sealed class TranscriptReader(string path)
             // that will not parse is skipped; the next one usually does.
         }
     }
+
+    private static bool Interrupted(JsonElement record) =>
+        record.TryGetProperty("message", out var message) &&
+        message.TryGetProperty("content", out var content) &&
+        content.ValueKind == JsonValueKind.Array &&
+        content.EnumerateArray().Any(part =>
+            Read(part, "type") == "text" &&
+            Read(part, "text") is { } text &&
+            text.StartsWith(InterruptionMarker, StringComparison.Ordinal));
 
     private static int Count(JsonElement usage, string name) =>
         usage.TryGetProperty(name, out var value) && value.TryGetInt32(out var count) ? count : 0;
