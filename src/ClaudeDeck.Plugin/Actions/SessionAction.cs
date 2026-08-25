@@ -331,7 +331,7 @@ internal sealed class SessionAction(
             bySlot[placed[session.Id]] = session;
         }
 
-        alerts.Settle(sessions.Where(session => session.AwaitingUser).Select(session => session.Id));
+        alerts.Settle(sessions.Where(WantsAttention).Select(session => session.Id));
 
         var alerting = false;
 
@@ -342,7 +342,7 @@ internal sealed class SessionAction(
 
             if (live)
             {
-                var lit = alerts.Alerting(session!.Id, session.AwaitingUser);
+                var lit = alerts.Alerting(session!.Id, WantsAttention(session));
                 alerting |= lit;
                 face = SessionKeyFace.Render(
                     Describe(session),
@@ -417,7 +417,7 @@ internal sealed class SessionAction(
             foreach (var (context, sessionId) in _showing)
             {
                 if (bySession.TryGetValue(sessionId, out var session) &&
-                    alerts.Alerting(sessionId, session.AwaitingUser))
+                    alerts.Alerting(sessionId, WantsAttention(session)))
                 {
                     frames.Add((context, SessionKeyFace.Render(Describe(session), glow)));
                 }
@@ -431,7 +431,7 @@ internal sealed class SessionAction(
 
     /// <summary>How many sessions are waiting to be looked at, muted or not.</summary>
     public int Waiting() =>
-        agents.Snapshot().SelectMany(agent => agent.Sessions).Count(session => session.AwaitingUser);
+        agents.Snapshot().SelectMany(agent => agent.Sessions).Count(WantsAttention);
 
     /// <summary>
     /// Each visible key paired with the slot it shows. A key whose coordinates never arrived
@@ -452,6 +452,13 @@ internal sealed class SessionAction(
             ];
         }
     }
+
+    /// <summary>
+    /// Whether this session is waiting on its owner: its turn has ended, or it is stopped at a
+    /// question. Both are the deck asking to be looked at, and the alert key counts both.
+    /// </summary>
+    private static bool WantsAttention(AgentSession session) =>
+        session.AwaitingUser || session.PendingTool is { Length: > 0 };
 
     /// <summary>A visible key: which device it is on, and where. Both decide its slot.</summary>
     private sealed record DeckKey(string? Device, DeckCoordinates? Coordinates);

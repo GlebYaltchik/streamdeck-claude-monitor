@@ -120,7 +120,7 @@ public static class SessionKeyFace
     {
         var asking = session.State == SessionState.WaitingApproval && session.PendingTool is { Length: > 0 };
         var background = asking && answerable ? Answerable : Background(session.State);
-        var image = new KeyImage().Background(Blend(background, Lit, attention));
+        var image = new KeyImage().Background(Blend(background, Peak(background, asking), attention));
 
         if (asking)
         {
@@ -227,6 +227,18 @@ public static class SessionKeyFace
 
     private static int Channel(string colour, int index) =>
         Convert.ToInt32(colour.Substring(1 + (index * 2), 2), 16);
+
+    /// <summary>
+    /// The top of the swell. Everything else rises to one warm colour, which is what makes a
+    /// finished turn recognisable across a deck of slots.
+    ///
+    /// A slot holding a question rises to a lighter version of its own colour instead. Both
+    /// waiting faces swell, and the pair has to stay apart at every point of it: the whole
+    /// difference between a key that can answer and a key that only reports is that colour,
+    /// and a common peak would rub it out twice a breath.
+    /// </summary>
+    private static string Peak(string background, bool asking) =>
+        asking ? Blend(background, "#ffffff", 0.4) : Lit;
 
     private static string Background(SessionState state) => state switch
     {

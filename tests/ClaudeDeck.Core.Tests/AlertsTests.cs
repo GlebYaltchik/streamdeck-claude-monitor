@@ -9,8 +9,8 @@ public class AlertsTests
     {
         var alerts = new Alerts();
 
-        Assert.True(alerts.Alerting("session-1", awaitingUser: true));
-        Assert.False(alerts.Alerting("session-1", awaitingUser: false));
+        Assert.True(alerts.Alerting("session-1", waiting: true));
+        Assert.False(alerts.Alerting("session-1", waiting: false));
     }
 
     [Fact]
@@ -19,8 +19,8 @@ public class AlertsTests
         var alerts = new Alerts();
         alerts.ToggleMute();
 
-        Assert.False(alerts.Alerting("session-1", awaitingUser: true));
-        Assert.False(alerts.Alerting("session-2", awaitingUser: true));
+        Assert.False(alerts.Alerting("session-1", waiting: true));
+        Assert.False(alerts.Alerting("session-2", waiting: true));
     }
 
     /// <summary>
@@ -32,12 +32,12 @@ public class AlertsTests
     {
         var alerts = new Alerts();
         alerts.ToggleMute();
-        Assert.False(alerts.Alerting("session-1", awaitingUser: true));
+        Assert.False(alerts.Alerting("session-1", waiting: true));
 
         alerts.ToggleMute();
 
         Assert.False(alerts.Muted);
-        Assert.True(alerts.Alerting("session-1", awaitingUser: true));
+        Assert.True(alerts.Alerting("session-1", waiting: true));
     }
 
     [Fact]
@@ -47,8 +47,8 @@ public class AlertsTests
 
         alerts.Acknowledge("session-1");
 
-        Assert.False(alerts.Alerting("session-1", awaitingUser: true));
-        Assert.True(alerts.Alerting("session-2", awaitingUser: true));
+        Assert.False(alerts.Alerting("session-1", waiting: true));
+        Assert.True(alerts.Alerting("session-2", waiting: true));
     }
 
     /// <summary>
@@ -65,7 +65,7 @@ public class AlertsTests
         alerts.Settle([]);
 
         // Its next turn ends.
-        Assert.True(alerts.Alerting("session-1", awaitingUser: true));
+        Assert.True(alerts.Alerting("session-1", waiting: true));
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class AlertsTests
 
         alerts.Settle(["session-1"]);
 
-        Assert.False(alerts.Alerting("session-1", awaitingUser: true));
+        Assert.False(alerts.Alerting("session-1", waiting: true));
     }
 
     [Fact]

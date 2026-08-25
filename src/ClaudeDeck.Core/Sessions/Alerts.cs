@@ -10,6 +10,10 @@ namespace ClaudeDeck.Core.Sessions;
 /// A slot stops flashing once it has been acknowledged with a tap. The acknowledgement is
 /// forgotten as soon as the session stops waiting, so the end of its next turn flashes again
 /// rather than being silently swallowed by a tap from an hour ago.
+///
+/// Two things count as waiting: a turn that has ended, and a question the session is stopped
+/// at. The second was added once permission questions reached the deck — a session frozen on
+/// one is the most literal case of waiting for its owner there is.
 /// </summary>
 public sealed class Alerts
 {
@@ -32,9 +36,9 @@ public sealed class Alerts
     }
 
     /// <summary>Whether this session should be flashing right now.</summary>
-    public bool Alerting(string sessionId, bool awaitingUser)
+    public bool Alerting(string sessionId, bool waiting)
     {
-        if (!awaitingUser || Muted)
+        if (!waiting || Muted)
         {
             return false;
         }

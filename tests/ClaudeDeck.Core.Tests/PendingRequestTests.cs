@@ -79,6 +79,30 @@ public class PendingRequestTests
         Assert.Equal(Words(reporting), Words(answering));
     }
 
+    /// <summary>
+    /// Both waiting faces swell, so the colour that tells them apart has to survive the whole
+    /// breath. A shared peak would rub it out twice every two and a half seconds.
+    /// </summary>
+    [Fact]
+    public void The_two_waiting_faces_stay_apart_at_the_top_of_the_swell()
+    {
+        var asking = new SessionSlotFace(
+            SessionState.WaitingApproval,
+            Title: "deck plugin",
+            Project: "streamdeck",
+            ContextPercent: 40,
+            ContextEstimated: false,
+            PendingTool: "Bash",
+            PendingSummary: "git push --force");
+
+        foreach (var glow in new[] { 0.0, 0.5, 1.0 })
+        {
+            Assert.NotEqual(
+                Decode(SessionKeyFace.Render(asking, glow)),
+                Decode(SessionKeyFace.Render(asking, glow, answerable: true)));
+        }
+    }
+
     private static string Words(string svg) =>
         string.Concat(svg.Split('>').Where(part => part.Contains('<')).Select(part => part.Split('<')[0]));
 
