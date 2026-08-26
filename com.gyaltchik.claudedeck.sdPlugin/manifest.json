@@ -106,6 +106,22 @@
       ]
     },
     {
+      "Name": "Answer",
+      "UUID": "com.gyaltchik.claudedeck.answer",
+      "Icon": "imgs/key",
+      "Tooltip": "One half of the Allow / Deny pair that answers a permission request. Put exactly two of these on the deck.",
+      "PropertyInspectorPath": "ui/answer.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/key",
+          "TitleAlignment": "middle"
+        }
+      ]
+    },
+    {
       "Name": "Pending approval",
       "UUID": "com.gyaltchik.claudedeck.approval",
       "Icon": "imgs/key",

@@ -1,0 +1,79 @@
+using ClaudeDeck.Core.Permissions;
+
+namespace ClaudeDeck.Core.Rendering;
+
+/// <summary>
+/// Draws one half of the answering pair: Allow or Deny.
+///
+/// The pair is exactly two keys, and a key that is not part of one says so on its own face
+/// rather than waiting silently for a press that will do nothing. A deck is arranged by
+/// dragging keys onto it, so the instruction belongs where the mistake is visible — on the
+/// key, in the words that fix it.
+///
+/// The colour is the role and the brightness is how close the key is to being pressed. Off,
+/// the words are grey and the key reads as disabled, which is what it is. On, the role
+/// colours arrive dark: the pair is ready but nothing has asked it for anything, and the keys
+/// that are asking for attention are the session keys — the pair must not compete with them.
+/// Full brightness is kept back for the one moment it means something, which is a session
+/// addressed and the pair waiting to be pressed.
+///
+/// Allow and Deny are the one place on this deck where green and red mean what everybody
+/// already reads them as.
+/// </summary>
+public static class AnswerKeyFace
+{
+    private const string Label = "ANSWER";
+
+    // The pair on, but nothing addressed. Dark enough to stay out of the way of a session key
+    // that is swelling for attention, and still coloured enough to say which key is which.
+    private const string AllowResting = "#31543f";
+
+    private const string DenyResting = "#6d3b3b";
+
+    /// <summary>
+    /// The pair off. Grey, and no brighter than the resting colours above it: switching
+    /// answering on must never look like a key going dimmer, which is what a lighter disabled
+    /// grey did on the device.
+    /// </summary>
+    private const string Disabled = "#414850";
+
+    /// <param name="keys">
+    /// How many answer keys are on the deck. Anything but two is not a pair, and every one of
+    /// them says what to do about it.
+    /// </param>
+    /// <param name="answering">
+    /// Whether the deck may answer at all, which is the Approvals mode. Off, the pair is drawn
+    /// grey rather than hidden: a key that vanishes when the mode changes leaves nothing to
+    /// explain why it stopped working.
+    /// </param>
+    public static string Render(AnswerRole role, int keys, bool answering)
+    {
+        if (keys != 2)
+        {
+            return Unpaired(keys);
+        }
+
+        var image = new KeyImage()
+            .Background(KeyPalette.Background)
+            .Text(Label, 30, 19, KeyPalette.Muted)
+            .Text(AnswerRoles.Name(role), 82, 30, answering ? Resting(role) : Disabled, bold: true);
+
+        if (!answering)
+        {
+            image.Text("watch only", 124, 17, Disabled);
+        }
+
+        return image.ToDataUrl();
+    }
+
+    private static string Unpaired(int keys) =>
+        new KeyImage()
+            .Background(KeyPalette.Background)
+            .Text(Label, 30, 19, KeyPalette.Muted)
+            .Text("no pair", 82, 28, KeyPalette.Warning, bold: true)
+            .Text(keys < 2 ? "add one more" : "keep only two", 124, 17, KeyPalette.Dim)
+            .ToDataUrl();
+
+    private static string Resting(AnswerRole role) =>
+        role == AnswerRole.Allow ? AllowResting : DenyResting;
+}

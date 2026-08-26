@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="utf-8">
-  <title>ClaudeDeck Approvals</title>
+  <title>ClaudeDeck Answer</title>
   <style>
     body {
       margin: 0;
@@ -43,17 +43,24 @@
 <body>
   <div class="field">
     <div class="row">
-      <input id="answering" type="checkbox">
-      <label for="answering">Answer permission requests from session keys</label>
+      <input id="swapped" type="checkbox">
+      <label for="swapped">Deny first, Allow second</label>
     </div>
     <p class="hint">
-      With this on, a tap on a waiting session key denies what it is asking for and a hold
-      allows it. With it off the deck still shows which session is waiting, and the question is
-      answered in the session's own window as usual.
+      Two of these keys make a pair. The first of them — leftmost, top row first — is Allow and
+      the other is Deny; tick this to turn the pair around. Both keys change together, so a pair
+      is never two Allows.
     </p>
+  </div>
+
+  <div class="field">
+    <div class="row">
+      <input id="answering" type="checkbox">
+      <label for="answering">Answer permission requests from the deck</label>
+    </div>
     <p class="hint">
-      This is the same setting an Approvals key carries, so a deck with one of those does not
-      need this box at all.
+      The same setting an Approvals key carries. With it off the pair rests and answers nothing,
+      and a waiting session is answered in its own window as usual.
     </p>
   </div>
 
@@ -62,6 +69,7 @@
     let propertyInspectorUuid = null;
     let settings = {};
 
+    const swapped = document.getElementById('swapped');
     const answering = document.getElementById('answering');
 
     function connectElgatoStreamDeckSocket(port, uuid, registerEvent) {
@@ -84,18 +92,20 @@
 
         if (event.event === 'didReceiveGlobalSettings') {
           settings = (event.payload && event.payload.settings) || {};
+          swapped.checked = settings.swapped === true;
           answering.checked = settings.mode === 'active';
         }
       };
     }
 
     // The whole object goes back every time: Stream Deck stores what it is given rather than
-    // merging it, so sending the mode alone would erase the settings written by another key.
+    // merging it, so sending one field alone would erase the settings written by another key.
     function save() {
       if (!websocket || websocket.readyState !== WebSocket.OPEN) {
         return;
       }
 
+      settings.swapped = swapped.checked;
       settings.mode = answering.checked ? 'active' : 'observe';
 
       websocket.send(JSON.stringify({
@@ -105,6 +115,7 @@
       }));
     }
 
+    swapped.addEventListener('change', save);
     answering.addEventListener('change', save);
   </script>
 </body>

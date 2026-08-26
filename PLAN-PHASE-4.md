@@ -158,12 +158,16 @@ press can say which session they mean.
   one setting, not two, so flipping one flips the other and the pair can never be two Allows.
 
   **Exactly two, or nothing works**, and every key says so on its own face rather than failing
-  silently: one key on the deck, or three, and each of them says a pair is what it needs. The
-  faces also carry the other two states they will need — answering switched off, which is the
-  Approvals mode on `observe`, and switched on with nothing addressed.
+  silently: one key on the deck, or three, and each of them says a pair is what it needs.
 
-  Nothing can be answered yet: a press does nothing. Built in this order for the same reason as
-  Step 2 — the pair has to be arrangeable, and has to explain itself, before it can act.
+  Off — the Approvals mode on `observe` — the words go grey and the key reads as disabled. On,
+  the role colours arrive dark and the key asks for nothing: the session keys are what swell
+  for attention, and the pair must not compete with them. Brightness is kept back for the one
+  moment it will mean something, which is Step 7.
+
+  Nothing can be answered yet: a press does nothing, and the pair says nothing about tapping —
+  there is nothing to tap yet. Built in this order for the same reason as Step 2: the pair has
+  to be arrangeable, and has to explain itself, before it can act.
 - **Files:** `src/ClaudeDeck.Plugin/Actions/AnswerAction.cs`,
   `src/ClaudeDeck.Core/Rendering/AnswerKeyFace.cs`, `src/ClaudeDeck.Plugin/PluginSettings.cs`,
   `com.gyaltchik.claudedeck.sdPlugin/manifest.json`, `com.gyaltchik.claudedeck.sdPlugin/ui/*`,
@@ -189,10 +193,12 @@ press can say which session they mean.
   or replaced by another. That last one is not tidiness: an address that survives its own
   question is how the pair answers the *next* one.
 
-  Twenty seconds is short enough that keys going quiet unexplained would read as a fault, so
-  the pair names the session it is armed for and drains a bar over the twenty. The addressed
-  slot is framed, and the touch strip shows the addressed session rather than the oldest wait —
-  the strip and the keys must never mean two different sessions.
+  The pair gains the two faces Step 6 held back. A session waiting anywhere puts **tap a
+  session** on both keys, still dark — the instruction appears when it is worth following. An
+  address turns them **bright**, and in place of the instruction a bar drains right to left
+  over the twenty seconds: short enough that keys going quiet unexplained would read as a
+  fault. The addressed slot is framed, and the touch strip shows the addressed session rather
+  than the oldest wait — the strip and the keys must never mean two different sessions.
 - **Files:** `src/ClaudeDeck.Core/Permissions/Addressing.cs`,
   `src/ClaudeDeck.Plugin/Actions/SessionAction.cs`,
   `src/ClaudeDeck.Plugin/Actions/AnswerAction.cs`,

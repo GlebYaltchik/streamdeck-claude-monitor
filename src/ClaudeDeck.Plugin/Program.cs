@@ -38,6 +38,7 @@ internal static class Program
 
         var alerts = new Alerts();
         var modes = new DeckModes();
+        var roles = new AnswerRoles();
         var usageAction = new UsageAction(connection, usage);
         var summaryAction = new SummaryAction(connection, hub.Agents);
         var sessionAction = new SessionAction(
@@ -51,6 +52,7 @@ internal static class Program
         var modeAction = new ModeAction(connection, modes);
         var queue = new PendingQueue(hub.Agents);
         var approvalAction = new ApprovalAction(connection, queue);
+        var answerAction = new AnswerAction(connection, modes, roles);
         var actions = new IDeckAction[]
         {
             usageAction,
@@ -59,6 +61,7 @@ internal static class Program
             alertAction,
             modeAction,
             approvalAction,
+            answerAction,
         }.ToDictionary(action => action.Uuid, StringComparer.Ordinal);
 
         hub.Agents.Changed += summaryAction.Refresh;
@@ -71,7 +74,13 @@ internal static class Program
         alerts.Changed += alertAction.Refresh;
 
         modes.Changed += modeAction.Refresh;
-        modes.Changed += () => _ = RememberAsync(connection, modes);
+        modes.Changed += () => _ = RememberAsync(connection, modes, roles);
+
+        // The pair is drawn resting when the deck may not answer, and both keys change sides
+        // together because there is only one side to change.
+        modes.Changed += answerAction.Refresh;
+        roles.Changed += answerAction.Refresh;
+        roles.Changed += () => _ = RememberAsync(connection, modes, roles);
 
         // A session key answers only in active mode, and says so by its colour.
         modes.Changed += sessionAction.Refresh;
@@ -83,6 +92,7 @@ internal static class Program
             if (deckEvent.Name == "didReceiveGlobalSettings")
             {
                 modes.Set(PluginSettings.Mode(deckEvent.Payload));
+                roles.Set(PluginSettings.Swapped(deckEvent.Payload));
                 return Task.CompletedTask;
             }
 
@@ -124,19 +134,26 @@ internal static class Program
     }
 
     /// <summary>
-    /// Writes the mode into the plugin's settings, so a deck answers the same way after a
-    /// restart as it did before one. Detached from the key press for the same reason as the
-    /// hub once was: a key must not wait on a socket.
+    /// Writes the plugin's settings, so a deck answers the same way after a restart as it did
+    /// before one. Detached from the key press for the same reason as the hub once was: a key
+    /// must not wait on a socket.
+    ///
+    /// Both settings go every time. Stream Deck stores what it is given rather than merging
+    /// it, so writing one of them alone would erase the other.
     /// </summary>
-    private static async Task RememberAsync(IDeckConnection connection, DeckModes modes)
+    private static async Task RememberAsync(IDeckConnection connection, DeckModes modes, AnswerRoles roles)
     {
         try
         {
-            await connection.SaveGlobalSettingsAsync(new { mode = DeckModes.Name(modes.Current) });
+            await connection.SaveGlobalSettingsAsync(new
+            {
+                mode = DeckModes.Name(modes.Current),
+                swapped = roles.Swapped,
+            });
         }
         catch (Exception ex)
         {
-            PluginLog.Write($"could not save the mode: {ex.Message}");
+            PluginLog.Write($"could not save the settings: {ex.Message}");
         }
     }
 
