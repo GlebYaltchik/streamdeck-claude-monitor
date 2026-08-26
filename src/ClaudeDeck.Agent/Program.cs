@@ -113,6 +113,24 @@ app.MapPost("/hook/{hookEvent}", async (string hookEvent, HttpRequest request, C
     return Results.NoContent();
 });
 
+// Started before anything is announced. The banner used to come first, so an agent that lost
+// the port still said it had one - and started detached, the bind exception went nowhere at
+// all and the process simply vanished. That is not hypothetical: WSL2 publishes a
+// distribution's listening port onto the Windows loopback, so an agent inside WSL on this port
+// takes it from the Windows one (findings/wsl-agent.md).
+try
+{
+    app.Start();
+}
+catch (IOException ex)
+{
+    Console.Error.WriteLine($"could not listen on http://127.0.0.1:{port}: {ex.Message}");
+    Console.Error.WriteLine(
+        "Another agent already has it, or WSL is publishing a distribution's port onto the " +
+        $"Windows loopback. Give one of them another port with CLAUDEDECK_AGENT_PORT.");
+    return 1;
+}
+
 Console.WriteLine($"ClaudeDeck agent on http://127.0.0.1:{port}");
 Console.WriteLine($"recording to {events.Path}");
 
@@ -122,9 +140,9 @@ var reporting = hub.RunAsync(stopping.Token);
 var tracking = context.RunAsync(stopping.Token);
 var watching = liveness.RunAsync(stopping.Token);
 
-app.Run();
+app.WaitForShutdown();
 await Task.WhenAll(reporting, tracking, watching);
-return;
+return 0;
 
 static TimeSpan Minutes(string variable, int fallbackMinutes) =>
     TimeSpan.FromMinutes(
