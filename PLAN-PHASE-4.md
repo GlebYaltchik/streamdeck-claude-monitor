@@ -1,6 +1,6 @@
 # Plan: ClaudeDeck phase 4 — answer permission prompts from the deck
 
-<!-- 9 steps: 1 observe, 2 kill switch, 3 show, 4 answer, 5 settings, 6 addressing, 7 danger, 8-9 remember. -->
+<!-- 10 steps: 1 observe, 2 switch, 3 show, 4 answer, 5 settings, 6-7 pair, 8 danger, 9-10 remember. -->
 
 ## Goal
 
@@ -35,8 +35,8 @@ around.
 **Answering moved onto the session key** after a standalone Deny key was built and tried. With
 one session waiting it worked; with several it has to pick one, and "the oldest" is a guess the
 key cannot explain in the space it has — a session name rarely fits on a key. The question and
-its answer now live on the same key, and a separate answer key returns in Step 6, once a press
-can say which session it means.
+its answer now live on the same key, and separate answer keys return in Steps 6 and 7, once a
+press can say which session they mean.
 
 ## Assumptions / context
 
@@ -63,12 +63,12 @@ can say which session it means.
   and the session waits for a human — but the deck must not keep showing a request it can no
   longer answer.
 - **`allow` from a key is irreversible the moment the command runs.** Unchanged from the
-  original plan: a long press (Step 4), danger classification (Step 7), and the command shown
+  original plan: a long press (Step 4), danger classification (Step 8), and the command shown
   before the key can be pressed (Step 3).
 - **"Allow always" writes into the user's permission state.** `permission_suggestions` name
   their own destination, and `localSettings` means editing a file inside the user's repository
-  from a key press. Step 8 keeps the decision ours: an agent-side store by default, so a
-  mistaken press is revocable from the deck (Step 9).
+  from a key press. Step 9 keeps the decision ours: an agent-side store by default, so a
+  mistaken press is revocable from the deck (Step 10).
 - **Only the desktop application is measured.** Anything that turns out to be app-specific
   belongs in a finding, not in a workaround.
 
@@ -150,19 +150,61 @@ can say which session it means.
   ticked, and the choice survives a plugin restart; with an Approvals key present the two agree
 - **Commit:** `plugin: keep the approval mode in the plugin settings`
 
-### Step 6: Address one session, then answer with separate keys
+### Step 6: Put a pair of answer keys on the deck
 
-- **Change:** The other way round, and the one that makes a standalone answer key honest: a
-  press on a session key makes that session the one the deck is talking about, and Allow and
-  Deny keys then answer it. The address is dropped when it is used, when the same key is
-  pressed again, or after twenty seconds — an address that outlives what it was for is how the
-  wrong session gets answered.
-- **Files:** `src/ClaudeDeck.Plugin/*`, `src/ClaudeDeck.Core/Rendering/*`
-- **Verify:** on the device, with two sessions waiting, addressing one and pressing Deny
-  answers that one and no other; the address lapses on its own after twenty seconds
-- **Commit:** `plugin: address a session and answer it from separate keys`
+- **Change:** One new action, dropped on the deck twice: together the two keys are **Allow** and
+  **Deny**. Which is which comes from their position, read the same way session slots are read,
+  so a pair works with nothing configured. A checkbox in either key's settings swaps the pair —
+  one setting, not two, so flipping one flips the other and the pair can never be two Allows.
 
-### Step 7: Classify dangerous commands and say so
+  **Exactly two, or nothing works**, and every key says so on its own face rather than failing
+  silently: one key on the deck, or three, and each of them says a pair is what it needs. The
+  faces also carry the other two states they will need — answering switched off, which is the
+  Approvals mode on `observe`, and switched on with nothing addressed.
+
+  Nothing can be answered yet: a press does nothing. Built in this order for the same reason as
+  Step 2 — the pair has to be arrangeable, and has to explain itself, before it can act.
+- **Files:** `src/ClaudeDeck.Plugin/Actions/AnswerAction.cs`,
+  `src/ClaudeDeck.Core/Rendering/AnswerKeyFace.cs`, `src/ClaudeDeck.Plugin/PluginSettings.cs`,
+  `com.gyaltchik.claudedeck.sdPlugin/manifest.json`, `com.gyaltchik.claudedeck.sdPlugin/ui/*`,
+  `tests/ClaudeDeck.Core.Tests/*`
+- **Verify:** `dotnet test`; on the device a single key says it needs a pair, a second key makes
+  the two read Allow and Deny, a third makes all three say so again, the checkbox swaps both at
+  once, and the pair reads as off while Approvals is on observe
+- **Commit:** `plugin: add a pair of allow and deny keys`
+
+### Step 7: Address one session, then answer it with the pair
+
+- **Change:** What makes a standalone answer key honest: with the pair present and the mode
+  `active`, a tap on a waiting session key no longer denies — it makes that session the one the
+  deck is talking about for **twenty seconds** and arms the pair, and Allow or Deny then answers
+  it. Without a pair on the deck nothing changes: a tap denies and a hold allows, as now.
+
+  **The hold stops answering once the pair exists.** With the pair, answering is always two
+  presses; leaving the hold would keep a command reachable in one gesture and give two ways to
+  do the same thing, and the pair is the one that can say which session it means.
+
+  The address is dropped when it is used, when the same key is tapped again, after twenty
+  seconds, and **when the question it was for is gone** — answered in the session's own window,
+  or replaced by another. That last one is not tidiness: an address that survives its own
+  question is how the pair answers the *next* one.
+
+  Twenty seconds is short enough that keys going quiet unexplained would read as a fault, so
+  the pair names the session it is armed for and drains a bar over the twenty. The addressed
+  slot is framed, and the touch strip shows the addressed session rather than the oldest wait —
+  the strip and the keys must never mean two different sessions.
+- **Files:** `src/ClaudeDeck.Core/Permissions/Addressing.cs`,
+  `src/ClaudeDeck.Plugin/Actions/SessionAction.cs`,
+  `src/ClaudeDeck.Plugin/Actions/AnswerAction.cs`,
+  `src/ClaudeDeck.Plugin/PendingQueue.cs`, `src/ClaudeDeck.Core/Rendering/*`,
+  `tests/ClaudeDeck.Core.Tests/*`
+- **Verify:** `dotnet test`; on the device, with two sessions waiting, addressing one and
+  pressing Deny answers that one and no other; the bar drains and the pair goes idle after
+  twenty seconds; answering in the session's own window drops the address rather than leaving it
+  pointed at the next question
+- **Commit:** `plugin: address a session and answer it from the pair`
+
+### Step 8: Classify dangerous commands and say so
 
 - **Change:** `rm -rf`, `git push --force`, `curl | sh`, `sudo`, writes outside the working
   directory and paths that look like secrets. A dangerous call turns the key red and takes a
@@ -174,7 +216,7 @@ can say which session it means.
   is red and does not yield to the ordinary hold
 - **Commit:** `core: mark dangerous requests and make them harder to allow`
 
-### Step 8: Remember an "allow always"
+### Step 9: Remember an "allow always"
 
 - **Change:** The third console answer. The protocol offers `permission_suggestions` and would
   write the rule into the user's own settings; we keep the rule in **the agent's store**
@@ -186,13 +228,13 @@ can say which session it means.
   its second use, in a fresh session, with the deck untouched
 - **Commit:** `agent: remember an allow-always decision`
 
-### Step 9: List and revoke remembered rules from the deck
+### Step 10: List and revoke remembered rules from the deck
 
 - **Change:** Without revocation, "allow always" is an irreversible decision taken by a key that
-  is easy to press by accident — part of Step 8's safety, not a nicety. The encoder lists what
+  is easy to press by accident — part of Step 9's safety, not a nicety. The encoder lists what
   has accumulated and a press takes one back.
 - **Files:** `src/ClaudeDeck.Plugin/Actions/*`, `src/ClaudeDeck.Agent/*`
-- **Verify:** on the device, a rule added in Step 8 is listed and can be removed, after which
+- **Verify:** on the device, a rule added in Step 9 is listed and can be removed, after which
   the same command prompts again
 - **Commit:** `plugin: list and revoke remembered allow-always rules`
 
