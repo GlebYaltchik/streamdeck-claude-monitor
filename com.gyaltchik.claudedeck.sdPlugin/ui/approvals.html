@@ -52,8 +52,8 @@
       answered in the session's own window as usual.
     </p>
     <p class="hint">
-      This is the same setting an Approvals key carries. That key can also switch the deck off
-      entirely, which stops it watching for questions at all.
+      This is the same setting an Approvals key carries, so a deck with one of those does not
+      need this box at all.
     </p>
   </div>
 
@@ -93,9 +93,6 @@
         return;
       }
 
-      // Off is deliberately not reachable from here. It is a stronger statement than "do not
-      // answer" - it stops the deck watching - and a checkbox with two states cannot say
-      // which of the three it means.
       websocket.send(JSON.stringify({
         event: 'setGlobalSettings',
         context: propertyInspectorUuid,

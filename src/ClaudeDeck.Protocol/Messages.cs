@@ -21,13 +21,6 @@ public sealed record SessionsUpdate(IReadOnlyList<AgentSession> Sessions);
 public sealed record ForgetSession(string SessionId);
 
 /// <summary>
-/// Hub to agent: the deck's mode, by name — <c>off</c>, <c>observe</c> or <c>active</c>.
-/// A name this build does not know reads as <c>observe</c>, which is what an agent that was
-/// never told does too.
-/// </summary>
-public sealed record ModeUpdate(string Mode);
-
-/// <summary>
 /// Hub to agent: answer the question this session is waiting on. <c>Behaviour</c> carries the
 /// client's own word for it, <c>allow</c> or <c>deny</c>, and a message rides along with a
 /// denial so the model is told why.

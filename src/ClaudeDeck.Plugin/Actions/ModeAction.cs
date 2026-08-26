@@ -8,8 +8,8 @@ namespace ClaudeDeck.Plugin.Actions;
 /// design §6.4 requires. It exists before anything can decide, so the way to turn the feature
 /// off is older than the feature.
 ///
-/// Pressed rather than held: three modes need cycling, and the dangerous one is entered
-/// deliberately by pressing twice past the harmless one rather than by holding.
+/// Pressed rather than held: it says which of two things a session key does, and neither is
+/// reached by the press itself — the dangerous one still needs a hold on the session key.
 ///
 /// The mode is the plugin's, not the key's: it is saved in the plugin's own settings, so it
 /// survives a restart, reads the same on every mode key, and still has an answer on a deck
@@ -45,7 +45,7 @@ internal sealed class ModeAction(IDeckConnection connection, DeckModes modes) : 
                 // Only the change is made here. Remembering it is the plugin's job, because
                 // the mode also changes from the Property Inspector, and one writer is easier
                 // to reason about than two agreeing ones.
-                modes.Cycle();
+                modes.Toggle();
                 break;
 
             case "willDisappear":

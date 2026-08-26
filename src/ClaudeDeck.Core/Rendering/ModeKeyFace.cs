@@ -5,16 +5,14 @@ namespace ClaudeDeck.Core.Rendering;
 /// <summary>
 /// Draws the mode key: how far the deck is allowed into permission decisions.
 ///
-/// The mode is the word, and the colour is how much power it grants — grey for out of it,
-/// blue for watching, amber for able to answer. Amber rather than green: this is the setting
-/// that lets a key press run a command, and it should look like something that is switched
-/// on rather than something that is fine.
+/// The mode is the word, and the colour is how much power it grants — blue for watching,
+/// amber for able to answer. Amber rather than green: this is the setting that lets a key
+/// press run a command, and it should look like something switched on rather than something
+/// that is fine.
 /// </summary>
 public static class ModeKeyFace
 {
     private const string Label = "APPROVALS";
-
-    private const string OffColour = "#7c828c";
 
     private const string ObserveColour = "#5b93d6";
 
@@ -28,21 +26,13 @@ public static class ModeKeyFace
             .Text(Explanation(mode), 124, 17, KeyPalette.Dim)
             .ToDataUrl();
 
-    private static string Colour(DeckMode mode) => mode switch
-    {
-        DeckMode.Off => OffColour,
-        DeckMode.Active => ActiveColour,
-        _ => ObserveColour,
-    };
+    private static string Colour(DeckMode mode) =>
+        mode == DeckMode.Active ? ActiveColour : ObserveColour;
 
     /// <summary>
     /// What the mode actually does, in the words the design uses for it. The key is read by
     /// someone deciding whether to change it, and "observe" alone does not say enough.
     /// </summary>
-    private static string Explanation(DeckMode mode) => mode switch
-    {
-        DeckMode.Off => "not watching",
-        DeckMode.Active => "answer here",
-        _ => "watch only",
-    };
+    private static string Explanation(DeckMode mode) =>
+        mode == DeckMode.Active ? "answer here" : "watch only";
 }

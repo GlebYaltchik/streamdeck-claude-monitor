@@ -1,11 +1,17 @@
 namespace ClaudeDeck.Core.Permissions;
 
-/// <summary>How far the deck is allowed into a session's permission decisions.</summary>
+/// <summary>
+/// Whether a key may answer a permission question, or only show it.
+///
+/// There were three of these. The third, Off, also stopped the agent holding a question open
+/// and stopped the deck flagging one at all — and no scenario was found that wanted it.
+/// Holding costs a session nothing (the question is on screen throughout, and answering it
+/// there closes ours), and the switch design §6.4 asks for is <see cref="Observe"/>, which
+/// cannot act by construction. Two states also mean the key and the settings checkbox say
+/// exactly the same thing, instead of the checkbox being able to express two of three.
+/// </summary>
 public enum DeckMode
 {
-    /// <summary>The deck stays out of it entirely: nothing is flagged and nothing is held.</summary>
-    Off,
-
     /// <summary>A waiting session is shown, and answered nowhere but in the session.</summary>
     Observe,
 
@@ -17,10 +23,8 @@ public enum DeckMode
 /// The one switch design §6.4 asks for, shared by the key that shows it and the hub that
 /// tells every agent about it.
 ///
-/// It defaults to Observe rather than Active: watching costs a session nothing, and deciding
-/// from a key is the thing that has to be chosen on purpose. It defaults to Observe rather
-/// than Off too, because a switch nobody has touched should still do the harmless half of
-/// the job.
+/// It defaults to Observe: watching costs a session nothing, and answering from a key is the
+/// thing that has to be chosen on purpose.
 /// </summary>
 public sealed class DeckModes
 {
@@ -31,13 +35,9 @@ public sealed class DeckModes
 
     public DeckMode Current { get; private set; } = DeckMode.Observe;
 
-    /// <summary>Steps to the next mode: off, observe, active, and round again.</summary>
-    public void Cycle() => Set(Current switch
-    {
-        DeckMode.Off => DeckMode.Observe,
-        DeckMode.Observe => DeckMode.Active,
-        _ => DeckMode.Off,
-    });
+    /// <summary>Switches between watching and answering.</summary>
+    public void Toggle() =>
+        Set(Current == DeckMode.Active ? DeckMode.Observe : DeckMode.Active);
 
     public void Set(DeckMode mode)
     {
@@ -56,7 +56,8 @@ public sealed class DeckModes
 
     /// <summary>
     /// What the mode is called on the wire and in a saved setting. Anything unrecognised
-    /// reads as Observe, which is the same answer as never having been told.
+    /// reads as Observe, which is the same answer as never having been told — and that
+    /// includes <c>off</c>, written by builds that had three modes.
     /// </summary>
     public static DeckMode Parse(string? mode) =>
         Enum.TryParse<DeckMode>(mode, ignoreCase: true, out var parsed) ? parsed : DeckMode.Observe;

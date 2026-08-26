@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
 using ClaudeDeck.Agent;
-using ClaudeDeck.Core.Permissions;
 using ClaudeDeck.Core.Sessions;
 using ClaudeDeck.Protocol;
 
@@ -40,9 +39,8 @@ var approvalHold = Minutes("CLAUDEDECK_APPROVAL_HOLD_MINUTES", 15);
 
 var events = new EventLog();
 var sessions = new SessionRegistry();
-var modes = new DeckModes();
-var approvals = new PendingApprovals(sessions, modes, approvalHold, Console.WriteLine);
-var hub = new HubClient(sessions, modes, approvals.Resolve, HubToken.Read(), Console.WriteLine);
+var approvals = new PendingApprovals(sessions, approvalHold, Console.WriteLine);
+var hub = new HubClient(sessions, approvals.Resolve, HubToken.Read(), Console.WriteLine);
 var context = new ContextTracker(sessions, Console.WriteLine);
 context.Changed += hub.Publish;
 var liveness = new LivenessMonitor(sessions, staleAfter, forgetAfter, Console.WriteLine);
@@ -92,9 +90,7 @@ app.MapPost("/hook/{hookEvent}", async (string hookEvent, HttpRequest request, C
         events.Append(hookEvent, payload);
         tracked = Parse(hookEvent, payload);
 
-        // A question the deck has no business in leaves the session's state alone: with the
-        // deck off, a slot must not go amber for something nobody on it can answer.
-        if (tracked is not null && (tracked.Name != PermissionRequest || approvals.Holds(tracked)))
+        if (tracked is not null)
         {
             sessions.Apply(tracked);
             hub.Publish();

@@ -91,14 +91,19 @@ can say which session it means.
 
 ### Step 2: Put the plugin's mode on a key
 
-- **Change:** **Off / Observe / Active** as a key, defaulting to Observe. Off stops the deck
-  flagging anything; Observe flags without deciding, which is what Step 1 built; Active is
-  accepted and does nothing yet. Built before anything can decide, so the kill switch design
-  §6.4 requires exists before the thing it switches off.
+- **Change:** **Observe / Active** as a key, defaulting to Observe. Observe flags without
+  deciding, which is what Step 1 built; Active is accepted and does nothing yet. Built before
+  anything can decide, so the kill switch design §6.4 requires exists before the thing it
+  switches off.
+
+  It was three modes at first. The third, Off, also stopped the agent holding a question open
+  and stopped the deck flagging one — and no scenario wanted it: holding costs a session
+  nothing, and the switch §6.4 asks for is Observe, which cannot act by construction. Two
+  states also let the key and the settings checkbox say exactly the same thing.
 - **Files:** `src/ClaudeDeck.Plugin/Actions/*`, `src/ClaudeDeck.Core/Rendering/*`,
   `com.gyaltchik.claudedeck.sdPlugin/manifest.json`
-- **Verify:** on the device, the key cycles the three modes and survives a plugin restart; in
-  Off the amber state from Step 1 stops appearing
+- **Verify:** on the device, the key switches between the two modes and survives a plugin
+  restart
 - **Commit:** `plugin: switch the plugin between off, observe and active`
 
 ### Step 3: Show what is being asked
@@ -138,7 +143,8 @@ can say which session it means.
 - **Change:** Today the only way to stop a key answering is an Approvals key on the deck. A
   panel without one has no switch at all, and the mode it inherits is invisible. The mode moves
   into the plugin's own settings, where an Approvals key sets it when there is one and a
-  checkbox in the Property Inspector does when there is not. Off by default either way.
+  checkbox in the Property Inspector does when there is not. Answering off by default either
+  way, and an unreadable setting reads as off rather than on.
 - **Files:** `src/ClaudeDeck.Plugin/*`, `com.gyaltchik.claudedeck.sdPlugin/ui/*`
 - **Verify:** on the device, a deck with no Approvals key answers nothing until the checkbox is
   ticked, and the choice survives a plugin restart; with an Approvals key present the two agree

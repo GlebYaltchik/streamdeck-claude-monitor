@@ -7,22 +7,19 @@ namespace ClaudeDeck.Core.Tests;
 public class DeckModeTests
 {
     /// <summary>
-    /// Off, observe, active, and round again. The dangerous mode is two presses from the
-    /// harmless one in each direction, so it is never reached by brushing the key once.
+    /// Two states, so the key and the settings checkbox can say the same thing. It starts on
+    /// the one that cannot act.
     /// </summary>
     [Fact]
-    public void The_key_cycles_through_all_three_modes()
+    public void The_key_switches_between_watching_and_answering()
     {
         var modes = new DeckModes();
         Assert.Equal(DeckMode.Observe, modes.Current);
 
-        modes.Cycle();
+        modes.Toggle();
         Assert.Equal(DeckMode.Active, modes.Current);
 
-        modes.Cycle();
-        Assert.Equal(DeckMode.Off, modes.Current);
-
-        modes.Cycle();
+        modes.Toggle();
         Assert.Equal(DeckMode.Observe, modes.Current);
     }
 
@@ -40,23 +37,23 @@ public class DeckModeTests
     }
 
     /// <summary>
-    /// A name from a newer build, or a settings file written by hand, must not turn the deck
-    /// on by accident. Unreadable reads as observe, the same as never having been told.
+    /// A name from a newer build, a settings file written by hand, or "off" from a build that
+    /// had three modes: none of them may turn answering on by accident.
     /// </summary>
     [Fact]
     public void An_unknown_mode_name_reads_as_observe()
     {
         Assert.Equal(DeckMode.Observe, DeckModes.Parse(null));
         Assert.Equal(DeckMode.Observe, DeckModes.Parse("whatever-comes-next"));
-        Assert.Equal(DeckMode.Off, DeckModes.Parse("off"));
+        Assert.Equal(DeckMode.Observe, DeckModes.Parse("off"));
         Assert.Equal(DeckMode.Active, DeckModes.Parse("ACTIVE"));
     }
 
     [Fact]
     public void The_key_says_the_mode_and_what_it_does()
     {
-        Assert.Contains(">off<", Decode(ModeKeyFace.Render(DeckMode.Off)));
-        Assert.Contains(">not watching<", Decode(ModeKeyFace.Render(DeckMode.Off)));
+        Assert.Contains(">observe<", Decode(ModeKeyFace.Render(DeckMode.Observe)));
+        Assert.Contains(">watch only<", Decode(ModeKeyFace.Render(DeckMode.Observe)));
         Assert.Contains(">active<", Decode(ModeKeyFace.Render(DeckMode.Active)));
         Assert.Contains(">answer here<", Decode(ModeKeyFace.Render(DeckMode.Active)));
     }

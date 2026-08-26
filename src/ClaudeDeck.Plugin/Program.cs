@@ -70,14 +70,11 @@ internal static class Program
         alerts.Changed += sessionAction.Refresh;
         alerts.Changed += alertAction.Refresh;
 
-        // The mode is the agents' business as much as the key's: with the deck off they stop
-        // holding questions open, which is what makes the switch a real one.
         modes.Changed += modeAction.Refresh;
         modes.Changed += () => _ = RememberAsync(connection, modes);
 
         // A session key answers only in active mode, and says so by its colour.
         modes.Changed += sessionAction.Refresh;
-        modes.Changed += () => _ = TellAgentsAsync(hub, modes);
 
         connection.EventReceived += deckEvent =>
         {
@@ -129,7 +126,7 @@ internal static class Program
     /// <summary>
     /// Writes the mode into the plugin's settings, so a deck answers the same way after a
     /// restart as it did before one. Detached from the key press for the same reason as the
-    /// agents are: a key must not wait on a socket.
+    /// hub once was: a key must not wait on a socket.
     /// </summary>
     private static async Task RememberAsync(IDeckConnection connection, DeckModes modes)
     {
@@ -140,23 +137,6 @@ internal static class Program
         catch (Exception ex)
         {
             PluginLog.Write($"could not save the mode: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Passes the mode to every connected agent. Detached from the key press on purpose: a
-    /// key must not wait on a websocket, and an agent that misses the message is told again
-    /// when it reconnects.
-    /// </summary>
-    private static async Task TellAgentsAsync(HubServer hub, DeckModes modes)
-    {
-        try
-        {
-            await hub.SetModeAsync(DeckModes.Name(modes.Current));
-        }
-        catch (Exception ex)
-        {
-            PluginLog.Write($"could not send the mode: {ex.Message}");
         }
     }
 

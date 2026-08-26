@@ -10,7 +10,6 @@ namespace ClaudeDeck.Core.Tests;
 public class DeckModeParsingTests
 {
     [Theory]
-    [InlineData("off", DeckMode.Off)]
     [InlineData("observe", DeckMode.Observe)]
     [InlineData("active", DeckMode.Active)]
     [InlineData("Active", DeckMode.Active)]
@@ -22,10 +21,11 @@ public class DeckModeParsingTests
     [InlineData("")]
     [InlineData("  ")]
     [InlineData("allow-everything")]
+    [InlineData("off")]
     public void Anything_else_is_observe(string? saved) =>
         Assert.Equal(DeckMode.Observe, DeckModes.Parse(saved));
 
     [Fact]
     public void A_mode_survives_being_written_and_read_back() =>
-        Assert.Equal(DeckMode.Off, DeckModes.Parse(DeckModes.Name(DeckMode.Off)));
+        Assert.Equal(DeckMode.Active, DeckModes.Parse(DeckModes.Name(DeckMode.Active)));
 }

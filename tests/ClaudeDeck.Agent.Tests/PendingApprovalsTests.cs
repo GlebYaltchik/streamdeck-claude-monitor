@@ -17,7 +17,7 @@ public class PendingApprovalsTests
     {
         var sessions = Waiting();
         var changed = 0;
-        var approvals = new PendingApprovals(sessions, new DeckModes(), TimeSpan.FromMinutes(15), _ => { });
+        var approvals = new PendingApprovals(sessions, TimeSpan.FromMinutes(15), _ => { });
         approvals.Changed += () => changed++;
 
         using var abandoned = new CancellationTokenSource();
@@ -38,7 +38,7 @@ public class PendingApprovalsTests
     {
         var sessions = Waiting();
         var changed = 0;
-        var approvals = new PendingApprovals(sessions, new DeckModes(), TimeSpan.Zero, _ => { });
+        var approvals = new PendingApprovals(sessions, TimeSpan.Zero, _ => { });
         approvals.Changed += () => changed++;
 
         await approvals.HoldAsync("session-1", CancellationToken.None);
@@ -54,7 +54,7 @@ public class PendingApprovalsTests
     public async Task An_answer_from_the_deck_is_what_the_hook_prints()
     {
         var sessions = Waiting();
-        var approvals = new PendingApprovals(sessions, new DeckModes(), TimeSpan.FromMinutes(15), _ => { });
+        var approvals = new PendingApprovals(sessions, TimeSpan.FromMinutes(15), _ => { });
 
         var holding = approvals.HoldAsync("session-1", CancellationToken.None);
         while (!approvals.Resolve("session-1", ApprovalDecision.Denied()))
@@ -75,29 +75,19 @@ public class PendingApprovalsTests
     [Fact]
     public void An_answer_for_a_session_that_is_no_longer_waiting_does_nothing()
     {
-        var approvals = new PendingApprovals(new SessionRegistry(), new DeckModes(), TimeSpan.Zero, _ => { });
+        var approvals = new PendingApprovals(new SessionRegistry(), TimeSpan.Zero, _ => { });
 
         Assert.False(approvals.Resolve("session-1", ApprovalDecision.Denied()));
     }
 
     /// <summary>
-    /// The switch design §6.4 asks for, and the reason it exists before anything can decide:
-    /// off means the question is the session's own affair.
+    /// Holding a question whose answer the client would ignore stalls the session and gains
+    /// nothing, so a mode that does not honour a decision is not held for.
     /// </summary>
     [Fact]
-    public void Nothing_is_held_while_the_deck_is_off()
+    public void A_question_nobody_could_answer_from_outside_is_not_held()
     {
-        var modes = new DeckModes();
-        modes.Set(DeckMode.Off);
-        var approvals = new PendingApprovals(new SessionRegistry(), modes, TimeSpan.Zero, _ => { });
-
-        Assert.False(approvals.Holds(Request("default")));
-    }
-
-    [Fact]
-    public void A_question_nobody_on_the_deck_could_answer_is_not_held()
-    {
-        var approvals = new PendingApprovals(new SessionRegistry(), new DeckModes(), TimeSpan.Zero, _ => { });
+        var approvals = new PendingApprovals(new SessionRegistry(), TimeSpan.Zero, _ => { });
 
         Assert.True(approvals.Holds(Request("default")));
         Assert.False(approvals.Holds(Request("auto")));

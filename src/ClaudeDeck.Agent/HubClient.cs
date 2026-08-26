@@ -14,7 +14,6 @@ namespace ClaudeDeck.Agent;
 /// </summary>
 internal sealed class HubClient(
     SessionRegistry sessions,
-    DeckModes modes,
     Func<string, ApprovalDecision, bool> decide,
     string? token,
     Action<string> log)
@@ -170,11 +169,6 @@ internal sealed class HubClient(
                 sessions.Forget(forget.SessionId);
                 log($"session {forget.SessionId} cleared from the deck");
                 Publish();
-                break;
-
-            case HubProtocol.Mode when envelope.PayloadAs<ModeUpdate>() is { Mode.Length: > 0 } update:
-                modes.Set(DeckModes.Parse(update.Mode));
-                log($"deck is {DeckModes.Name(modes.Current)}");
                 break;
 
             case HubProtocol.Decide when envelope.PayloadAs<DecideRequest>() is { SessionId.Length: > 0 } request:

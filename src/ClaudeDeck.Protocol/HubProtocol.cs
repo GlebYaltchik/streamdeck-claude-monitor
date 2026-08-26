@@ -31,13 +31,6 @@ public static class HubProtocol
     public const string Forget = "forget";
 
     /// <summary>
-    /// Hub to agent: how far the deck is allowed into permission decisions. Sent as each
-    /// agent connects and again whenever it changes, so an agent that was offline for the
-    /// change is not left acting on a mode nobody chose.
-    /// </summary>
-    public const string Mode = "mode";
-
-    /// <summary>
     /// Hub to agent: answer the permission question this session is waiting on. Addressed by
     /// session rather than by a question id, because a session can only ever be asked one
     /// thing at a time — it is stopped until the answer comes.

@@ -23,7 +23,6 @@ namespace ClaudeDeck.Agent;
 /// </summary>
 internal sealed class PendingApprovals(
     SessionRegistry sessions,
-    DeckModes modes,
     TimeSpan hold,
     Action<string> log)
 {
@@ -34,13 +33,11 @@ internal sealed class PendingApprovals(
     public event Action? Changed;
 
     /// <summary>
-    /// Whether this event is one the deck has any business in. Off means exactly that: the
-    /// question is the session's own affair, so it is neither flagged nor held. A mode whose
-    /// decisions the client ignores is the same case for a different reason.
+    /// Whether this event is one worth holding. A question in a mode whose decisions the
+    /// client ignores is not: holding it would stall the session and gain nothing.
     /// </summary>
     public bool Holds(HookEvent hookEvent) =>
         hookEvent.Name == "PermissionRequest" &&
-        modes.Current != DeckMode.Off &&
         PermissionModes.AnswerableFromOutside(hookEvent.PermissionMode);
 
     /// <summary>
