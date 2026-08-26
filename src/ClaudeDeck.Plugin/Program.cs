@@ -73,15 +73,26 @@ internal static class Program
         // The mode is the agents' business as much as the key's: with the deck off they stop
         // holding questions open, which is what makes the switch a real one.
         modes.Changed += modeAction.Refresh;
+        modes.Changed += () => _ = RememberAsync(connection, modes);
 
         // A session key answers only in active mode, and says so by its colour.
         modes.Changed += sessionAction.Refresh;
         modes.Changed += () => _ = TellAgentsAsync(hub, modes);
 
         connection.EventReceived += deckEvent =>
-            deckEvent.Action is not null && actions.TryGetValue(deckEvent.Action, out var action)
+        {
+            // Settings for the plugin belong to no action, so they are read here rather than
+            // routed to one. A deck with no Approvals key on it has no other way to be told.
+            if (deckEvent.Name == "didReceiveGlobalSettings")
+            {
+                modes.Set(PluginSettings.Mode(deckEvent.Payload));
+                return Task.CompletedTask;
+            }
+
+            return deckEvent.Action is not null && actions.TryGetValue(deckEvent.Action, out var action)
                 ? action.HandleAsync(deckEvent)
                 : Task.CompletedTask;
+        };
 
         using var shutdown = new CancellationTokenSource();
         Console.CancelKeyPress += (_, eventArgs) =>
@@ -113,6 +124,23 @@ internal static class Program
 
         PluginLog.Write("stopped");
         return 0;
+    }
+
+    /// <summary>
+    /// Writes the mode into the plugin's settings, so a deck answers the same way after a
+    /// restart as it did before one. Detached from the key press for the same reason as the
+    /// agents are: a key must not wait on a socket.
+    /// </summary>
+    private static async Task RememberAsync(IDeckConnection connection, DeckModes modes)
+    {
+        try
+        {
+            await connection.SaveGlobalSettingsAsync(new { mode = DeckModes.Name(modes.Current) });
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Write($"could not save the mode: {ex.Message}");
+        }
     }
 
     /// <summary>

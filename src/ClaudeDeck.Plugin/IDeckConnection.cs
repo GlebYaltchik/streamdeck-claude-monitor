@@ -27,4 +27,11 @@ internal interface IDeckConnection
     /// the same way one made in the Property Inspector does.
     /// </summary>
     Task SaveSettingsAsync(string context, object settings);
+
+    /// <summary>
+    /// Persists settings belonging to the plugin rather than to one control. What the deck
+    /// may do about permissions is one of those: it outlives any key that happens to be on
+    /// the deck at the time, and a deck with no such key still has to have an answer.
+    /// </summary>
+    Task SaveGlobalSettingsAsync(object settings);
 }

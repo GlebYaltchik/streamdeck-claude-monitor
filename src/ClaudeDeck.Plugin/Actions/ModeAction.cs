@@ -1,4 +1,3 @@
-using System.Text.Json;
 using ClaudeDeck.Core.Permissions;
 using ClaudeDeck.Core.Rendering;
 
@@ -12,8 +11,9 @@ namespace ClaudeDeck.Plugin.Actions;
 /// Pressed rather than held: three modes need cycling, and the dangerous one is entered
 /// deliberately by pressing twice past the harmless one rather than by holding.
 ///
-/// The mode is the plugin's, not the key's. It is saved on whichever key changed it so that
-/// it survives a restart, and any other mode key on the deck shows the same word.
+/// The mode is the plugin's, not the key's: it is saved in the plugin's own settings, so it
+/// survives a restart, reads the same on every mode key, and still has an answer on a deck
+/// that carries no mode key at all. Such a deck sets it from the Property Inspector instead.
 /// </summary>
 internal sealed class ModeAction(IDeckConnection connection, DeckModes modes) : IDeckAction
 {
@@ -22,11 +22,11 @@ internal sealed class ModeAction(IDeckConnection connection, DeckModes modes) : 
 
     public string Uuid => "com.gyaltchik.claudedeck.mode";
 
-    public async Task HandleAsync(DeckEvent deckEvent)
+    public Task HandleAsync(DeckEvent deckEvent)
     {
         if (deckEvent.Context is null)
         {
-            return;
+            return Task.CompletedTask;
         }
 
         switch (deckEvent.Name)
@@ -38,17 +38,14 @@ internal sealed class ModeAction(IDeckConnection connection, DeckModes modes) : 
                     _contexts.Add(deckEvent.Context);
                 }
 
-                // A saved mode is only read at the point a key appears. With no key on the
-                // deck at all the plugin stays on its default, which is the harmless one.
-                modes.Set(DeckModes.Parse(Saved(deckEvent.Payload)));
                 Refresh();
                 break;
 
             case "keyDown":
+                // Only the change is made here. Remembering it is the plugin's job, because
+                // the mode also changes from the Property Inspector, and one writer is easier
+                // to reason about than two agreeing ones.
                 modes.Cycle();
-                await connection.SaveSettingsAsync(
-                    deckEvent.Context,
-                    new { mode = DeckModes.Name(modes.Current) });
                 break;
 
             case "willDisappear":
@@ -60,6 +57,8 @@ internal sealed class ModeAction(IDeckConnection connection, DeckModes modes) : 
                 connection.Forget(deckEvent.Context);
                 break;
         }
+
+        return Task.CompletedTask;
     }
 
     /// <summary>Redraws every visible mode key. Safe to call from the hub's threads.</summary>
@@ -72,15 +71,6 @@ internal sealed class ModeAction(IDeckConnection connection, DeckModes modes) : 
             connection.Update(context, new ImageUpdate(face));
         }
     }
-
-    private static string? Saved(JsonElement payload) =>
-        payload.ValueKind == JsonValueKind.Object &&
-        payload.TryGetProperty("settings", out var settings) &&
-        settings.ValueKind == JsonValueKind.Object &&
-        settings.TryGetProperty("mode", out var mode) &&
-        mode.ValueKind == JsonValueKind.String
-            ? mode.GetString()
-            : null;
 
     private List<string> Contexts()
     {

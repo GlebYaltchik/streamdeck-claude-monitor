@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>ClaudeDeck Approvals</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 12px;
+      font-family: "Segoe UI", sans-serif;
+      font-size: 12px;
+      color: #d8d8d8;
+      background: #2d2d2d;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .row input {
+      margin: 1px 0 0;
+    }
+
+    .row label {
+      color: #d8d8d8;
+    }
+
+    .hint {
+      margin: 6px 0 0;
+      color: #7a828c;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="field">
+    <div class="row">
+      <input id="answering" type="checkbox">
+      <label for="answering">Answer permission requests from session keys</label>
+    </div>
+    <p class="hint">
+      With this on, a tap on a waiting session key denies what it is asking for and a hold
+      allows it. With it off the deck still shows which session is waiting, and the question is
+      answered in the session's own window as usual.
+    </p>
+    <p class="hint">
+      This is the same setting an Approvals key carries. That key can also switch the deck off
+      entirely, which stops it watching for questions at all.
+    </p>
+  </div>
+
+  <script>
+    let websocket = null;
+    let propertyInspectorUuid = null;
+
+    const answering = document.getElementById('answering');
+
+    function connectElgatoStreamDeckSocket(port, uuid, registerEvent) {
+      propertyInspectorUuid = uuid;
+
+      websocket = new WebSocket('ws://127.0.0.1:' + port);
+
+      websocket.onopen = () => {
+        websocket.send(JSON.stringify({ event: registerEvent, uuid: propertyInspectorUuid }));
+        websocket.send(JSON.stringify({ event: 'getGlobalSettings', context: propertyInspectorUuid }));
+      };
+
+      websocket.onmessage = (message) => {
+        let event;
+        try {
+          event = JSON.parse(message.data);
+        } catch (error) {
+          return;
+        }
+
+        if (event.event === 'didReceiveGlobalSettings') {
+          const settings = (event.payload && event.payload.settings) || {};
+          answering.checked = settings.mode === 'active';
+        }
+      };
+    }
+
+    function save() {
+      if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+        return;
+      }
+
+      // Off is deliberately not reachable from here. It is a stronger statement than "do not
+      // answer" - it stops the deck watching - and a checkbox with two states cannot say
+      // which of the three it means.
+      websocket.send(JSON.stringify({
+        event: 'setGlobalSettings',
+        context: propertyInspectorUuid,
+        payload: { mode: answering.checked ? 'active' : 'observe' }
+      }));
+    }
+
+    answering.addEventListener('change', save);
+  </script>
+</body>
+
+</html>

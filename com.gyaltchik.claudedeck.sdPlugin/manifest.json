@@ -57,7 +57,8 @@
           "Image": "imgs/key",
           "TitleAlignment": "middle"
         }
-      ]
+      ],
+      "PropertyInspectorPath": "ui/approvals.html"
     },
     {
       "Name": "Alerts",

@@ -35,11 +35,19 @@ internal sealed class StreamDeckConnection : IDeckConnection, IAsyncDisposable
     public Task SaveSettingsAsync(string context, object settings) =>
         SendAsync(new { @event = "setSettings", context, payload = settings });
 
+    public Task SaveGlobalSettingsAsync(object settings) =>
+        SendAsync(new { @event = "setGlobalSettings", context = _arguments.PluginUuid, payload = settings });
+
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         await _socket.ConnectAsync(new Uri($"ws://127.0.0.1:{_arguments.Port}"), cancellationToken);
         await SendAsync(new { @event = _arguments.RegisterEvent, uuid = _arguments.PluginUuid });
         PluginLog.Write("registered with Stream Deck");
+
+        // Asked for at once rather than waited for: the answer arrives as an ordinary event
+        // and carries what the deck is allowed to do, which has to be known before a key can
+        // be pressed rather than after.
+        await SendAsync(new { @event = "getGlobalSettings", context = _arguments.PluginUuid });
 
         var flushing = _updates.RunAsync(cancellationToken);
         await ReceiveLoopAsync(cancellationToken);
