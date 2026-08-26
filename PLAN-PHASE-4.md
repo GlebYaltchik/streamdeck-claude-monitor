@@ -190,6 +190,20 @@ can say which session it means.
   the same command prompts again
 - **Commit:** `plugin: list and revoke remembered allow-always rules`
 
+## Asked for, and deliberately not now
+
+Both came from the device and are worth keeping; neither belongs in a step of this phase.
+
+- **Merge the Alerts key and the Approvals key into one.** They ended up neighbours saying
+  related things: one counts what is waiting and silences it, the other says how far the deck
+  may go about it. One key could hold both, and should — but merging them changes a key that
+  works, and doing it mid-phase would mean re-testing the switch on the hardware for a
+  cosmetic gain. After the phase.
+- **A surface for a deck with several encoders.** The touch strip cannot carry a command in one
+  dial's segment, measured. A deck whose dials share one wide strip is a different surface with
+  room for the whole thing, and is worth designing for on its own rather than as a stretched
+  version of this one.
+
 ## Out of scope
 
 - **Mirroring a remembered rule into `settings.local.json`.** Available through
