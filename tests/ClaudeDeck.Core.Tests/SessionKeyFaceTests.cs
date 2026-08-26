@@ -197,6 +197,21 @@ public class SessionKeyFaceTests
     private static int Rectangles(string svg) =>
         svg.Split("<rect x=").Length - 1;
 
+    /// <summary>
+    /// Which session the answer pair is armed for has to be visible on the session itself,
+    /// and still: movement on a key already means the attention swell, and a second moving
+    /// thing would leave neither of them meaning anything.
+    /// </summary>
+    [Fact]
+    public void The_addressed_slot_is_framed()
+    {
+        var asking = new SessionSlotFace(
+            SessionState.WaitingApproval, "Deploy fix", "api", 45, false, "Bash", "npm test");
+
+        Assert.Contains("stroke=", Decode(SessionKeyFace.Render(asking, answerable: true, addressed: true)));
+        Assert.DoesNotContain("stroke=", Decode(SessionKeyFace.Render(asking, answerable: true)));
+    }
+
     private static string Decode(string dataUrl)
     {
         const string prefix = "data:image/svg+xml;base64,";

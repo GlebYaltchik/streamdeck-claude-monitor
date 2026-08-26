@@ -82,6 +82,48 @@ public class AnswerKeyFaceTests
         Assert.DoesNotContain("tap", Decode(AnswerKeyFace.Render(AnswerRole.Allow, keys: 2, answering: true)));
     }
 
+    /// <summary>
+    /// The instruction appears when there is something to follow it with, and goes again the
+    /// moment the press it was asking for has happened.
+    /// </summary>
+    [Fact]
+    public void The_pair_asks_for_a_tap_only_while_a_session_is_waiting()
+    {
+        Assert.Contains(
+            ">tap a session<",
+            Decode(AnswerKeyFace.Render(AnswerRole.Allow, keys: 2, answering: true, waiting: true)));
+
+        Assert.DoesNotContain(
+            "tap a session",
+            Decode(AnswerKeyFace.Render(AnswerRole.Allow, keys: 2, answering: true, waiting: true, remaining: 0.5)));
+    }
+
+    /// <summary>
+    /// Twenty seconds is short enough that keys going quiet with no warning would read as a
+    /// fault, so what is left of it is drawn where the instruction was.
+    /// </summary>
+    [Fact]
+    public void An_addressed_session_puts_the_time_left_on_the_pair()
+    {
+        var armed = Decode(AnswerKeyFace.Render(AnswerRole.Allow, keys: 2, answering: true, remaining: 0.5));
+
+        Assert.Contains("<rect", armed);
+        Assert.Contains("y=\"116\"", armed);
+    }
+
+    /// <summary>
+    /// Full brightness is the one thing that says the next press will answer something. It
+    /// must not arrive while the deck is only watching.
+    /// </summary>
+    [Fact]
+    public void The_pair_does_not_light_up_while_the_deck_may_not_answer()
+    {
+        var watching = Decode(AnswerKeyFace.Render(AnswerRole.Allow, keys: 2, answering: false, remaining: 0.5));
+
+        Assert.DoesNotContain("#4f9d69", watching);
+        Assert.Contains("#4f9d69", Decode(AnswerKeyFace.Render(AnswerRole.Allow, keys: 2, answering: true, remaining: 0.5)));
+    }
+
     private static string Decode(string dataUrl)
     {
         const string prefix = "data:image/svg+xml;base64,";

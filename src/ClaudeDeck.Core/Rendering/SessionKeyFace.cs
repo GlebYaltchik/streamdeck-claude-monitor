@@ -89,6 +89,12 @@ public static class SessionKeyFace
 
     private const int Margin = 12;
 
+    /// <summary>
+    /// The frame around the addressed slot, in the same light grey as the bar draining on the
+    /// answer keys — one address, said the same way in both places.
+    /// </summary>
+    private const int AddressWidth = 6;
+
     private const int NameSize = 22;
 
     /// <summary>
@@ -116,11 +122,25 @@ public static class SessionKeyFace
     /// Whether a press on this key would answer the question it is showing. Only the colour
     /// changes: a key that can act and one that cannot must not be told apart by reading.
     /// </param>
-    public static string Render(SessionSlotFace session, double attention = 0, bool answerable = false)
+    /// <param name="addressed">
+    /// Whether this is the session the answer pair is currently armed for. Drawn as a frame,
+    /// which is still: movement on a key already means the attention swell, and a second
+    /// moving thing on the same key would leave neither of them meaning anything.
+    /// </param>
+    public static string Render(
+        SessionSlotFace session,
+        double attention = 0,
+        bool answerable = false,
+        bool addressed = false)
     {
         var asking = session.State == SessionState.WaitingApproval && session.PendingTool is { Length: > 0 };
         var background = asking && answerable ? Answerable : Background(session.State);
         var image = new KeyImage().Background(Blend(background, Peak(background, asking), attention));
+
+        if (addressed)
+        {
+            image.Frame(KeyPalette.Muted, AddressWidth);
+        }
 
         if (asking)
         {

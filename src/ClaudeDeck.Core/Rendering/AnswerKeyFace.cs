@@ -24,6 +24,12 @@ public static class AnswerKeyFace
 {
     private const string Label = "ANSWER";
 
+    // An addressed session, and the pair waiting to be pressed. The one moment full brightness
+    // means something.
+    private const string AllowArmed = "#4f9d69";
+
+    private const string DenyArmed = "#e05c5c";
+
     // The pair on, but nothing addressed. Dark enough to stay out of the way of a session key
     // that is swelling for attention, and still coloured enough to say which key is which.
     private const string AllowResting = "#31543f";
@@ -46,21 +52,46 @@ public static class AnswerKeyFace
     /// grey rather than hidden: a key that vanishes when the mode changes leaves nothing to
     /// explain why it stopped working.
     /// </param>
-    public static string Render(AnswerRole role, int keys, bool answering)
+    /// <param name="waiting">
+    /// Whether any session is stopped at a question. The instruction appears only when there
+    /// is something to follow it with: a key that asks to be tapped when tapping achieves
+    /// nothing is a key that stops being read.
+    /// </param>
+    /// <param name="remaining">
+    /// What is left of the addressed session's twenty seconds, from 1 down to 0, or null when
+    /// nothing is addressed. It replaces the instruction rather than joining it — the press it
+    /// was asking for has happened, and what matters now is how long there is to finish.
+    /// </param>
+    public static string Render(
+        AnswerRole role,
+        int keys,
+        bool answering,
+        bool waiting = false,
+        double? remaining = null)
     {
         if (keys != 2)
         {
             return Unpaired(keys);
         }
 
+        var armed = answering && remaining is not null;
+
         var image = new KeyImage()
             .Background(KeyPalette.Background)
             .Text(Label, 30, 19, KeyPalette.Muted)
-            .Text(AnswerRoles.Name(role), 82, 30, answering ? Resting(role) : Disabled, bold: true);
+            .Text(AnswerRoles.Name(role), 82, 30, Word(role, answering, armed), bold: true);
 
         if (!answering)
         {
             image.Text("watch only", 124, 17, Disabled);
+        }
+        else if (armed)
+        {
+            image.Bar(remaining!.Value, KeyPalette.Muted, KeyPalette.Track, y: 116, height: 10, margin: 20);
+        }
+        else if (waiting)
+        {
+            image.Text("tap a session", 124, 17, KeyPalette.Dim);
         }
 
         return image.ToDataUrl();
@@ -74,6 +105,15 @@ public static class AnswerKeyFace
             .Text(keys < 2 ? "add one more" : "keep only two", 124, 17, KeyPalette.Dim)
             .ToDataUrl();
 
-    private static string Resting(AnswerRole role) =>
-        role == AnswerRole.Allow ? AllowResting : DenyResting;
+    private static string Word(AnswerRole role, bool answering, bool armed)
+    {
+        if (!answering)
+        {
+            return Disabled;
+        }
+
+        return armed
+            ? role == AnswerRole.Allow ? AllowArmed : DenyArmed
+            : role == AnswerRole.Allow ? AllowResting : DenyResting;
+    }
 }

@@ -16,16 +16,42 @@ namespace ClaudeDeck.Plugin.Actions;
 /// a key that looks ready and does nothing when pressed, which is the worst thing a key on
 /// this deck could be.
 ///
-/// Nothing is answered from here yet: a press does nothing until a session has been addressed.
-/// The pair is built first so that it can be arranged, and can explain itself, before it can
-/// act — the order the mode key was built in, and for the same reason.
+/// A press answers the addressed session and nothing else. That is what a standalone answer
+/// key could never do honestly: with two sessions waiting, "deny" on its own is a guess, and
+/// the space on a key is not enough to say which one it meant. The session key names the
+/// session, the pair names the answer.
 /// </summary>
-internal sealed class AnswerAction(IDeckConnection connection, DeckModes modes, AnswerRoles roles) : IDeckAction
+internal sealed class AnswerAction(
+    IDeckConnection connection,
+    DeckModes modes,
+    AnswerRoles roles,
+    Addressing addressing,
+    PendingQueue queue,
+    Func<string, ApprovalDecision, Task<bool>> decide) : IDeckAction
 {
     private readonly Dictionary<string, DeckKey> _keys = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The last face sent to each key, so a draining bar costs one message per step it
+    /// actually moves rather than one per tick of the clock driving it.
+    /// </summary>
+    private readonly Dictionary<string, string> _drawn = new(StringComparer.Ordinal);
+
     private readonly Lock _gate = new();
 
     public string Uuid => "com.gyaltchik.claudedeck.answer";
+
+    /// <summary>Whether the deck carries a pair, which is what makes addressing worth doing.</summary>
+    public bool Paired
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _keys.Count == 2;
+            }
+        }
+    }
 
     public Task HandleAsync(DeckEvent deckEvent)
     {
@@ -47,10 +73,15 @@ internal sealed class AnswerAction(IDeckConnection connection, DeckModes modes, 
                 Refresh();
                 break;
 
+            case "keyDown":
+                Press(deckEvent.Context);
+                break;
+
             case "willDisappear":
                 lock (_gate)
                 {
                     _keys.Remove(deckEvent.Context);
+                    _drawn.Remove(deckEvent.Context);
                 }
 
                 connection.Forget(deckEvent.Context);
@@ -61,18 +92,95 @@ internal sealed class AnswerAction(IDeckConnection connection, DeckModes modes, 
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Answers the addressed session. A press with nothing addressed does nothing at all —
+    /// deliberately silent, because the pair only ever speaks about a session somebody has
+    /// just pointed it at.
+    /// </summary>
+    private void Press(string context)
+    {
+        if (modes.Current != DeckMode.Active || !Paired)
+        {
+            return;
+        }
+
+        if (Role(context) is not { } role || addressing.Current(DateTimeOffset.UtcNow) is not { } addressed)
+        {
+            return;
+        }
+
+        // Dropped before the answer is sent, not after. The question is about to be closed
+        // either way, and an address outliving its own question is how the next one gets
+        // answered by a press meant for this.
+        addressing.Drop();
+
+        _ = AnswerAsync(role, addressed);
+    }
+
+    private async Task AnswerAsync(AnswerRole role, Addressed addressed)
+    {
+        var decision = role == AnswerRole.Allow
+            ? new ApprovalDecision(ApprovalDecision.Allow, null)
+            : ApprovalDecision.Denied();
+
+        var reached = await decide(addressed.SessionId, decision);
+
+        PluginLog.Write(reached
+            ? decision.Behaviour + " for " + addressed.Tool + " from the answer pair"
+            : "nothing left to answer for " + addressed.Tool);
+    }
+
     /// <summary>Redraws the pair. Safe to call from the hub's threads.</summary>
     public void Refresh()
     {
         var keys = Ordered();
         var answering = modes.Current == DeckMode.Active;
+        var now = DateTimeOffset.UtcNow;
+        var addressed = addressing.Current(now);
+        var waiting = queue.Waiting().Count > 0;
 
         foreach (var (context, position) in keys)
         {
-            connection.Update(
-                context,
-                new ImageUpdate(AnswerKeyFace.Render(roles.Of(position), keys.Count, answering)));
+            var face = AnswerKeyFace.Render(
+                roles.Of(position),
+                keys.Count,
+                answering,
+                waiting,
+                addressed is null ? null : addressing.Remaining(now));
+
+            lock (_gate)
+            {
+                if (_drawn.TryGetValue(context, out var already) && already == face)
+                {
+                    continue;
+                }
+
+                _drawn[context] = face;
+            }
+
+            connection.Update(context, new ImageUpdate(face));
         }
+    }
+
+    /// <summary>
+    /// Moves the draining bar on. Costs nothing while no session is addressed, which is almost
+    /// always, and the redraw itself is dropped whenever the bar has not moved a whole step.
+    /// </summary>
+    public void Pulse()
+    {
+        if (addressing.Current(DateTimeOffset.UtcNow) is null)
+        {
+            return;
+        }
+
+        Refresh();
+    }
+
+    private AnswerRole? Role(string context)
+    {
+        var position = Ordered().FindIndex(key => key.Context == context);
+
+        return position < 0 ? null : roles.Of(position);
     }
 
     /// <summary>

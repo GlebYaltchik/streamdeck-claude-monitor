@@ -33,12 +33,19 @@ namespace ClaudeDeck.Plugin.Actions;
 ///
 /// Allowing is held for half again as long as clearing. The two are otherwise the same
 /// movement, and muscle memory from one must not run a command through the other.
+///
+/// A pair of answer keys on the deck changes both gestures. A tap then addresses the session
+/// rather than denying it, and the hold does nothing at all: with the pair, answering is
+/// always two presses, and keeping the hold would leave a command reachable in one gesture
+/// while giving two ways to do the same thing.
 /// </summary>
 internal sealed class SessionAction(
     IDeckConnection connection,
     AgentRegistry agents,
     Alerts alerts,
     DeckModes modes,
+    Addressing addressing,
+    Func<bool> paired,
     Func<string, Task<bool>> forgetSession,
     Func<string, ApprovalDecision, Task<bool>> decide) : IDeckAction
 {
@@ -46,7 +53,11 @@ internal sealed class SessionAction(
     private enum Held
     {
         Clear,
+
         Allow,
+
+        /// <summary>Nothing: the pair answers, and a hold must not be a second way to allow.</summary>
+        Nothing,
     }
 
     /// <summary>
@@ -153,7 +164,21 @@ internal sealed class SessionAction(
         // What the hold means is settled now rather than when it fires: a question can be
         // answered in its own window while a finger is still down, and the gesture should do
         // what it meant when it started.
-        _ = HeldAsync(context, hold, Asking(context) is null ? Held.Clear : Held.Allow);
+        _ = HeldAsync(context, hold, Meaning(context));
+    }
+
+    /// <summary>
+    /// What a hold that starts now would do. A hold is still started when it means nothing,
+    /// because abandoning it is what tells a tap apart from a press held too long.
+    /// </summary>
+    private Held Meaning(string context)
+    {
+        if (Asking(context) is null)
+        {
+            return Held.Clear;
+        }
+
+        return paired() ? Held.Nothing : Held.Allow;
     }
 
     /// <summary>
@@ -200,11 +225,24 @@ internal sealed class SessionAction(
     /// </summary>
     private void Tapped(string context)
     {
-        // A question takes the gesture over: on a waiting key a tap is the answer that costs
-        // a retry and cannot run anything.
+        // A question takes the gesture over. With a pair on the deck the tap only says which
+        // session is meant and the pair answers it; without one the tap is itself the answer
+        // that costs a retry and cannot run anything.
         if (Asking(context) is { } asking)
         {
-            _ = AnswerAsync(asking, ApprovalDecision.Denied());
+            if (paired())
+            {
+                addressing.Address(
+                    asking.Id,
+                    asking.PendingTool!,
+                    asking.PendingSummary,
+                    DateTimeOffset.UtcNow);
+            }
+            else
+            {
+                _ = AnswerAsync(asking, ApprovalDecision.Denied());
+            }
+
             return;
         }
 
@@ -290,6 +328,11 @@ internal sealed class SessionAction(
                 return;
             }
 
+            if (meaning == Held.Nothing)
+            {
+                return;
+            }
+
             if (meaning == Held.Allow)
             {
                 // Asked again rather than trusted: the question may have been answered in its
@@ -333,6 +376,7 @@ internal sealed class SessionAction(
 
         alerts.Settle(sessions.Where(WantsAttention).Select(session => session.Id));
 
+        var addressed = addressing.Current(DateTimeOffset.UtcNow)?.SessionId;
         var alerting = false;
 
         foreach (var (context, slot) in Slots())
@@ -347,7 +391,8 @@ internal sealed class SessionAction(
                 face = SessionKeyFace.Render(
                     Describe(session),
                     lit ? SlotPulse.Glow(Elapsed()) : 0,
-                    answerable: modes.Current == DeckMode.Active);
+                    answerable: modes.Current == DeckMode.Active,
+                    addressed: session.Id == addressed);
             }
             else
             {
@@ -410,6 +455,8 @@ internal sealed class SessionAction(
             .SelectMany(agent => agent.Sessions)
             .ToDictionary(session => session.Id, StringComparer.Ordinal);
 
+        var addressed = addressing.Current(DateTimeOffset.UtcNow)?.SessionId;
+
         List<(string, string)> frames = [];
 
         lock (_gate)
@@ -419,7 +466,11 @@ internal sealed class SessionAction(
                 if (bySession.TryGetValue(sessionId, out var session) &&
                     alerts.Alerting(sessionId, WantsAttention(session)))
                 {
-                    frames.Add((context, SessionKeyFace.Render(Describe(session), glow)));
+                    frames.Add((context, SessionKeyFace.Render(
+                        Describe(session),
+                        glow,
+                        answerable: modes.Current == DeckMode.Active,
+                        addressed: sessionId == addressed)));
                 }
             }
         }

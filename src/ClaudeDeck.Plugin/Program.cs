@@ -39,20 +39,30 @@ internal static class Program
         var alerts = new Alerts();
         var modes = new DeckModes();
         var roles = new AnswerRoles();
+        var addressing = new Addressing();
+
+        Func<string, ApprovalDecision, Task<bool>> decide =
+            (session, decision) => hub.DecideAsync(session, decision.Behaviour, decision.Message);
+
         var usageAction = new UsageAction(connection, usage);
         var summaryAction = new SummaryAction(connection, hub.Agents);
+        var queue = new PendingQueue(hub.Agents, addressing);
+
+        // Before the session keys: a tap on one means something different once a pair is on
+        // the deck, and the pair is what knows whether there is one.
+        var answerAction = new AnswerAction(connection, modes, roles, addressing, queue, decide);
         var sessionAction = new SessionAction(
             connection,
             hub.Agents,
             alerts,
             modes,
+            addressing,
+            () => answerAction.Paired,
             hub.ForgetSessionAsync,
-            (session, decision) => hub.DecideAsync(session, decision.Behaviour, decision.Message));
+            decide);
         var alertAction = new AlertAction(connection, alerts, () => sessionAction.Waiting());
         var modeAction = new ModeAction(connection, modes);
-        var queue = new PendingQueue(hub.Agents);
         var approvalAction = new ApprovalAction(connection, queue);
-        var answerAction = new AnswerAction(connection, modes, roles);
         var actions = new IDeckAction[]
         {
             usageAction,
@@ -64,10 +74,27 @@ internal static class Program
             answerAction,
         }.ToDictionary(action => action.Uuid, StringComparer.Ordinal);
 
+        // First, so that nothing redraws an address whose question has already been answered
+        // somewhere else.
+        hub.Agents.Changed += () => addressing.Settle(
+            hub.Agents.Snapshot()
+                .SelectMany(agent => agent.Sessions)
+                .Where(session => session.PendingTool is { Length: > 0 })
+                .Select(session => (session.Id, session.PendingTool, session.PendingSummary)));
+
         hub.Agents.Changed += summaryAction.Refresh;
         hub.Agents.Changed += sessionAction.Refresh;
         hub.Agents.Changed += alertAction.Refresh;
         hub.Agents.Changed += approvalAction.Refresh;
+
+        // The pair asks to be tapped only while something is waiting to be answered.
+        hub.Agents.Changed += answerAction.Refresh;
+
+        // An address changes the slot that is framed, the pair that is armed, and the session
+        // the strip is talking about.
+        addressing.Changed += sessionAction.Refresh;
+        addressing.Changed += answerAction.Refresh;
+        addressing.Changed += approvalAction.Refresh;
 
         // Muting has to reach the slots as well as the key that did it.
         alerts.Changed += sessionAction.Refresh;
@@ -109,7 +136,7 @@ internal static class Program
         };
 
         var redrawing = RedrawAsync(usageAction, shutdown.Token);
-        var pulsing = PulseAsync(sessionAction, shutdown.Token);
+        var pulsing = PulseAsync(sessionAction, answerAction, addressing, shutdown.Token);
         var serving = hub.RunAsync(shutdown.Token);
 
         try
@@ -157,13 +184,21 @@ internal static class Program
         }
     }
 
-    private static async Task PulseAsync(SessionAction sessionAction, CancellationToken cancellationToken)
+    private static async Task PulseAsync(
+        SessionAction sessionAction,
+        AnswerAction answerAction,
+        Addressing addressing,
+        CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
                 await Task.Delay(FrameInterval, cancellationToken);
+
+                // The clock is the only thing that notices an address running out.
+                addressing.Expire(DateTimeOffset.UtcNow);
+                answerAction.Pulse();
                 await sessionAction.PulseAsync();
             }
             catch (OperationCanceledException)

@@ -70,6 +70,18 @@ public sealed class KeyImage
         return this;
     }
 
+    /// <summary>An outline just inside the key's edge, drawn over whatever is already there.</summary>
+    public KeyImage Frame(string colour, int width)
+    {
+        var inset = width / 2;
+
+        _elements.Append($"""
+            <rect x="{inset}" y="{inset}" width="{Size - width}" height="{Size - width}"
+                  fill="none" stroke="{colour}" stroke-width="{width}"/>
+            """);
+        return this;
+    }
+
     public KeyImage Text(string value, int y, int fontSize, string colour, bool bold = false)
     {
         var weight = bold ? """ font-weight="bold" """ : " ";
