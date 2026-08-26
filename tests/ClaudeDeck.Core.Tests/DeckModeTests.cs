@@ -50,12 +50,21 @@ public class DeckModeTests
     }
 
     [Fact]
-    public void The_key_says_the_mode_and_what_it_does()
+    public void The_key_says_the_mode()
     {
         Assert.Contains(">observe<", Decode(ModeKeyFace.Render(DeckMode.Observe)));
         Assert.Contains(">watch only<", Decode(ModeKeyFace.Render(DeckMode.Observe)));
         Assert.Contains(">active<", Decode(ModeKeyFace.Render(DeckMode.Active)));
-        Assert.Contains(">answer here<", Decode(ModeKeyFace.Render(DeckMode.Active)));
+    }
+
+    /// <summary>
+    /// Active used to say "answer here", which reads as an instruction to answer on this key.
+    /// Nothing on it can: it is the switch, and the answering happens elsewhere.
+    /// </summary>
+    [Fact]
+    public void The_key_does_not_claim_a_question_can_be_answered_on_it()
+    {
+        Assert.DoesNotContain("answer here", Decode(ModeKeyFace.Render(DeckMode.Active)));
     }
 
     private static string Decode(string dataUrl)

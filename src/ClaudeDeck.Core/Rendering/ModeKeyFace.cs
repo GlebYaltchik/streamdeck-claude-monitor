@@ -9,6 +9,10 @@ namespace ClaudeDeck.Core.Rendering;
 /// amber for able to answer. Amber rather than green: this is the setting that lets a key
 /// press run a command, and it should look like something switched on rather than something
 /// that is fine.
+///
+/// Only observe carries a caption. Active had one reading "answer here", which was read on
+/// the device as an instruction to answer on this key — and nothing on it can. The word alone
+/// says what the mode is; what may answer is the pair and the session keys.
 /// </summary>
 public static class ModeKeyFace
 {
@@ -18,21 +22,21 @@ public static class ModeKeyFace
 
     private const string ActiveColour = "#e0a03a";
 
-    public static string Render(DeckMode mode) =>
-        new KeyImage()
+    public static string Render(DeckMode mode)
+    {
+        var image = new KeyImage()
             .Background(KeyPalette.Background)
             .Text(Label, 30, 19, KeyPalette.Muted)
-            .Text(DeckModes.Name(mode), 82, 30, Colour(mode), bold: true)
-            .Text(Explanation(mode), 124, 17, KeyPalette.Dim)
-            .ToDataUrl();
+            .Text(DeckModes.Name(mode), 82, 30, Colour(mode), bold: true);
+
+        if (mode == DeckMode.Observe)
+        {
+            image.Text("watch only", 124, 17, KeyPalette.Dim);
+        }
+
+        return image.ToDataUrl();
+    }
 
     private static string Colour(DeckMode mode) =>
         mode == DeckMode.Active ? ActiveColour : ObserveColour;
-
-    /// <summary>
-    /// What the mode actually does, in the words the design uses for it. The key is read by
-    /// someone deciding whether to change it, and "observe" alone does not say enough.
-    /// </summary>
-    private static string Explanation(DeckMode mode) =>
-        mode == DeckMode.Active ? "answer here" : "watch only";
 }
