@@ -227,11 +227,19 @@ public sealed class SessionRegistry(Func<DateTimeOffset>? clock = null)
             "PostToolUse" => updated with { State = SessionState.Working, CurrentTool = null },
 
             // Claude Code is about to ask, so the session is now waiting on a person and
-            // says so itself. Cleared by ClearApproval when the question is answered.
+            // says so itself, in every permission mode. The event fires only when the client
+            // is about to ask, so there is no mode in which this is not a session standing
+            // still in front of somebody.
             //
-            // Only in a mode where an answer from outside would count. In the others the
-            // event fires but the client decides on its own, and nobody is being waited for.
-            "PermissionRequest" when PermissionModes.AnswerableFromOutside(updated.PermissionMode) =>
+            // This was once gated on the mode being one the deck could answer, which confused
+            // two different questions: whether an answer from outside would count, and whether
+            // anybody is waiting. A session stopped on an MCP prompt in acceptEdits was shown
+            // as working - the deck claiming a session was busy while its owner sat looking at
+            // a question is the exact failure it exists to prevent.
+            //
+            // Nothing has to clear this: every later event overwrites the state, and a person
+            // answering no interrupts the turn, which arrives through Interrupt.
+            "PermissionRequest" =>
                 updated with
                 {
                     State = SessionState.WaitingApproval,

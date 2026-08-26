@@ -156,6 +156,7 @@ internal sealed class SessionAction(
             return null;
         }
 
+
         string? sessionId;
 
         lock (_gate)
@@ -171,7 +172,9 @@ internal sealed class SessionAction(
         return agents.Snapshot()
             .SelectMany(agent => agent.Sessions)
             .FirstOrDefault(session =>
-                session.Id == sessionId && session.PendingTool is { Length: > 0 });
+                session.Id == sessionId &&
+                session.PendingTool is { Length: > 0 } &&
+                PermissionModes.AnswerableFromOutside(session.PermissionMode));
     }
 
     /// <summary>Returns whether there was a hold still running to abandon.</summary>
@@ -324,7 +327,7 @@ internal sealed class SessionAction(
                 face = SessionKeyFace.Render(
                     Describe(session),
                     lit ? SlotPulse.Glow(Elapsed()) : 0,
-                    answerable: Answerable(session!.Id, addressed),
+                    answerable: Answerable(session!, addressed),
                     addressed: session.Id == addressed);
             }
             else
@@ -402,7 +405,7 @@ internal sealed class SessionAction(
                     frames.Add((context, SessionKeyFace.Render(
                         Describe(session),
                         glow,
-                        answerable: Answerable(sessionId, addressed),
+                        answerable: Answerable(session, addressed),
                         addressed: sessionId == addressed)));
                 }
             }
@@ -413,8 +416,12 @@ internal sealed class SessionAction(
 
     /// <summary>
     /// Whether this session's question could be answered from the deck right now. It takes the
-    /// mode, a pair on the page, and — once the pair is aimed at a session — being that
-    /// session.
+    /// deck's mode, a pair on the page, a session whose own permission mode makes an answer
+    /// from outside count, and — once the pair is aimed at a session — being that session.
+    ///
+    /// A session waiting in a mode that ignores outside answers is still drawn, still flashes
+    /// and still counts as waiting. It is only drawn as something to be dealt with elsewhere,
+    /// which is what it is.
     ///
     /// That last part is what tells two waiting slots apart. Tapping the second one moves the
     /// aim, and with both drawn the same the only difference left was a frame, which the eye
@@ -422,10 +429,11 @@ internal sealed class SessionAction(
     /// aimed one stays bright and the rest go back to the colour of a question that has to be
     /// walked to, which is what they are while the pair belongs to something else.
     /// </summary>
-    private bool Answerable(string sessionId, string? addressed) =>
+    private bool Answerable(AgentSession session, string? addressed) =>
         modes.Current == DeckMode.Active &&
         paired() &&
-        (addressed is null || string.Equals(sessionId, addressed, StringComparison.Ordinal));
+        PermissionModes.AnswerableFromOutside(session.PermissionMode) &&
+        (addressed is null || string.Equals(session.Id, addressed, StringComparison.Ordinal));
 
     private TimeSpan Elapsed() => _breathing.Elapsed;
 

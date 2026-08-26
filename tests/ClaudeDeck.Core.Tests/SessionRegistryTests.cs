@@ -96,17 +96,43 @@ public class SessionRegistryTests
     }
 
     /// <summary>
-    /// In a mode that ignores an outside decision the client answers by itself, so nobody is
-    /// being waited for and holding the request would only stall the session.
+    /// The event fires only when the client is about to ask, so there is no mode in which it
+    /// does not mean a session standing still in front of somebody. Whether an answer from
+    /// outside would count is a different question, asked elsewhere.
+    ///
+    /// This was once the other way round, and a session stopped on an MCP prompt in
+    /// acceptEdits was reported as working while its owner sat looking at the question.
     /// </summary>
-    [Fact]
-    public void A_permission_request_in_auto_mode_waits_for_nobody()
+    [Theory]
+    [InlineData("default")]
+    [InlineData("acceptEdits")]
+    [InlineData("auto")]
+    [InlineData(null)]
+    public void A_permission_request_waits_in_every_mode(string? mode)
     {
         var registry = Started();
         registry.Apply(Event("UserPromptSubmit"));
-        registry.Apply(Event("PermissionRequest", tool: "Bash", mode: "auto"));
+        registry.Apply(Event("PermissionRequest", tool: "Bash", mode: mode));
 
-        Assert.Equal(SessionState.Working, Only(registry).State);
+        var session = Only(registry);
+        Assert.Equal(SessionState.WaitingApproval, session.State);
+        Assert.Equal("Bash", session.Pending?.Tool);
+    }
+
+    /// <summary>
+    /// Nothing announces that a question was answered when the agent is not holding it, so
+    /// the session's next event is what has to move it on.
+    /// </summary>
+    [Fact]
+    public void The_next_event_takes_a_session_off_a_question()
+    {
+        var registry = Started();
+        registry.Apply(Event("PermissionRequest", tool: "Bash", mode: "acceptEdits"));
+        registry.Apply(Event("PostToolUse", tool: "Bash"));
+
+        var session = Only(registry);
+        Assert.Equal(SessionState.Working, session.State);
+        Assert.Null(session.Pending);
     }
 
     /// <summary>
