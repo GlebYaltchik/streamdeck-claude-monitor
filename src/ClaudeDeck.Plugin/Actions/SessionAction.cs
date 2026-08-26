@@ -25,19 +25,17 @@ namespace ClaudeDeck.Plugin.Actions;
 /// clears under the finger, which is the only thing that says the hold was long enough — wait
 /// for the release and a hold that was already sufficient looks the same as one that was not.
 ///
-/// A session waiting for permission takes both gestures over: a tap denies and a hold allows.
-/// Answering belongs on the key that shows the question, because a separate answer key has to
-/// name which session it means, and a session name rarely fits on a key. While a question is
-/// open the slot cannot be cleared: the session is stopped anyway, and clearing it mid
-/// question would lose the one thing the key is there to say.
+/// Nothing on this key answers a permission question, and both gestures mean the same thing
+/// whatever state the session is in. They did not always: a tap on a waiting key used to deny
+/// and a hold used to allow, and once the answer pair arrived those meanings depended on
+/// whether the pair happened to be on the page being shown - which the person pressing cannot
+/// see, because Stream Deck only tells a plugin about the keys that are visible. A gesture
+/// whose meaning is decided by state nobody can see is one somebody will eventually be wrong
+/// about, and being wrong about that one ran a command.
 ///
-/// Allowing is held for half again as long as clearing. The two are otherwise the same
-/// movement, and muscle memory from one must not run a command through the other.
-///
-/// A pair of answer keys on the deck changes both gestures. A tap then addresses the session
-/// rather than denying it, and the hold does nothing at all: with the pair, answering is
-/// always two presses, and keeping the hold would leave a command reachable in one gesture
-/// while giving two ways to do the same thing.
+/// So a tap acknowledges and a hold clears, always, including while a question is open. What
+/// a pair on the page adds is not a different meaning but an extra one: the tap also aims the
+/// pair at this session, and the answer is given there.
 /// </summary>
 internal sealed class SessionAction(
     IDeckConnection connection,
@@ -46,32 +44,13 @@ internal sealed class SessionAction(
     DeckModes modes,
     Addressing addressing,
     Func<bool> paired,
-    Func<string, Task<bool>> forgetSession,
-    Func<string, ApprovalDecision, Task<bool>> decide) : IDeckAction
+    Func<string, Task<bool>> forgetSession) : IDeckAction
 {
-    /// <summary>What a hold on a key is for, decided when the key goes down.</summary>
-    private enum Held
-    {
-        Clear,
-
-        Allow,
-
-        /// <summary>Nothing: the pair answers, and a hold must not be a second way to allow.</summary>
-        Nothing,
-    }
-
     /// <summary>
     /// How long is long. Short enough not to feel like a wait, long enough that a knock
     /// against the deck does not reach it.
     /// </summary>
     private static readonly TimeSpan LongPress = TimeSpan.FromMilliseconds(800);
-
-    /// <summary>
-    /// Half again as long as clearing a slot. Allowing runs a command that Claude Code
-    /// stopped to ask about, and it must not be reachable by the hold somebody already has
-    /// in their fingers.
-    /// </summary>
-    private static readonly TimeSpan AllowPress = TimeSpan.FromMilliseconds(1200);
 
     private readonly Dictionary<string, DeckKey> _keys = new(StringComparer.Ordinal);
 
@@ -161,33 +140,18 @@ internal sealed class SessionAction(
             _holds[context] = hold;
         }
 
-        // What the hold means is settled now rather than when it fires: a question can be
-        // answered in its own window while a finger is still down, and the gesture should do
-        // what it meant when it started.
-        _ = HeldAsync(context, hold, Meaning(context));
+        _ = HeldAsync(context, hold);
     }
 
     /// <summary>
-    /// What a hold that starts now would do. A hold is still started when it means nothing,
-    /// because abandoning it is what tells a tap apart from a press held too long.
+    /// The session on this key that the answer pair could be aimed at. Three things have to
+    /// hold: a question is open, the mode lets the deck answer, and a pair is on the page to
+    /// answer with. Short of all three there is nothing to address, and the tap is only an
+    /// acknowledgement.
     /// </summary>
-    private Held Meaning(string context)
+    private AgentSession? Askable(string context)
     {
-        if (Asking(context) is null)
-        {
-            return Held.Clear;
-        }
-
-        return paired() ? Held.Nothing : Held.Allow;
-    }
-
-    /// <summary>
-    /// The session waiting on this key, when the deck is allowed to answer it. Both halves
-    /// matter: a session with a question open, and a mode that lets a key answer one.
-    /// </summary>
-    private AgentSession? Asking(string context)
-    {
-        if (modes.Current != DeckMode.Active)
+        if (modes.Current != DeckMode.Active || !paired())
         {
             return null;
         }
@@ -220,32 +184,12 @@ internal sealed class SessionAction(
     }
 
     /// <summary>
-    /// A tap: stops this slot flashing. The session is not touched — the deck has stopped
-    /// asking, which is all a tap can honestly mean.
+    /// A tap: stops this slot flashing, and aims the answer pair at the session when there is
+    /// a pair on the page and a question to aim it at. Nothing here answers anything - the
+    /// deck has stopped asking, and said what it is asking about.
     /// </summary>
     private void Tapped(string context)
     {
-        // A question takes the gesture over. With a pair on the deck the tap only says which
-        // session is meant and the pair answers it; without one the tap is itself the answer
-        // that costs a retry and cannot run anything.
-        if (Asking(context) is { } asking)
-        {
-            if (paired())
-            {
-                addressing.Address(
-                    asking.Id,
-                    asking.PendingTool!,
-                    asking.PendingSummary,
-                    DateTimeOffset.UtcNow);
-            }
-            else
-            {
-                _ = AnswerAsync(asking, ApprovalDecision.Denied());
-            }
-
-            return;
-        }
-
         string? sessionId;
 
         lock (_gate)
@@ -259,15 +203,17 @@ internal sealed class SessionAction(
         }
 
         alerts.Acknowledge(sessionId);
-        Refresh();
-    }
 
-    private async Task AnswerAsync(AgentSession asking, ApprovalDecision decision)
-    {
-        var reached = await decide(asking.Id, decision);
-        PluginLog.Write(reached
-            ? decision.Behaviour + " for " + asking.PendingTool + " in " + (asking.Title ?? asking.Id)
-            : "nothing left to answer in " + (asking.Title ?? asking.Id));
+        if (Askable(context) is { } asking)
+        {
+            addressing.Address(
+                asking.Id,
+                asking.PendingTool!,
+                asking.PendingSummary,
+                DateTimeOffset.UtcNow);
+        }
+
+        Refresh();
     }
 
     private bool AbandonLocked(string context)
@@ -294,14 +240,18 @@ internal sealed class SessionAction(
     /// <summary>
     /// Waits out the hold and, if the key is still down, clears the session on it. Holding an
     /// empty slot is a press with nothing to mean and does nothing.
+    ///
+    /// A session stopped at a question is cleared like any other. Clearing only takes it off
+    /// the deck: the question stays on screen in its own window and is answered there, which
+    /// is the same thing that happens to a question nobody ever put on a deck.
     /// </summary>
-    private async Task HeldAsync(string context, CancellationTokenSource hold, Held meaning)
+    private async Task HeldAsync(string context, CancellationTokenSource hold)
     {
         using (hold)
         {
             try
             {
-                await Task.Delay(meaning == Held.Allow ? AllowPress : LongPress, hold.Token);
+                await Task.Delay(LongPress, hold.Token);
             }
             catch (OperationCanceledException)
             {
@@ -325,23 +275,6 @@ internal sealed class SessionAction(
 
             if (sessionId is null)
             {
-                return;
-            }
-
-            if (meaning == Held.Nothing)
-            {
-                return;
-            }
-
-            if (meaning == Held.Allow)
-            {
-                // Asked again rather than trusted: the question may have been answered in its
-                // own window while the key was down, and then there is nothing to allow.
-                if (Asking(context) is { } asking)
-                {
-                    await AnswerAsync(asking, new ApprovalDecision(ApprovalDecision.Allow, null));
-                }
-
                 return;
             }
 
@@ -391,7 +324,7 @@ internal sealed class SessionAction(
                 face = SessionKeyFace.Render(
                     Describe(session),
                     lit ? SlotPulse.Glow(Elapsed()) : 0,
-                    answerable: modes.Current == DeckMode.Active,
+                    answerable: Answerable(session!.Id, addressed),
                     addressed: session.Id == addressed);
             }
             else
@@ -469,7 +402,7 @@ internal sealed class SessionAction(
                     frames.Add((context, SessionKeyFace.Render(
                         Describe(session),
                         glow,
-                        answerable: modes.Current == DeckMode.Active,
+                        answerable: Answerable(sessionId, addressed),
                         addressed: sessionId == addressed)));
                 }
             }
@@ -477,6 +410,22 @@ internal sealed class SessionAction(
 
         return frames;
     }
+
+    /// <summary>
+    /// Whether this session's question could be answered from the deck right now. It takes the
+    /// mode, a pair on the page, and — once the pair is aimed at a session — being that
+    /// session.
+    ///
+    /// That last part is what tells two waiting slots apart. Tapping the second one moves the
+    /// aim, and with both drawn the same the only difference left was a frame, which the eye
+    /// reads after colour: two bright keys, and no telling which the pair would answer. The
+    /// aimed one stays bright and the rest go back to the colour of a question that has to be
+    /// walked to, which is what they are while the pair belongs to something else.
+    /// </summary>
+    private bool Answerable(string sessionId, string? addressed) =>
+        modes.Current == DeckMode.Active &&
+        paired() &&
+        (addressed is null || string.Equals(sessionId, addressed, StringComparison.Ordinal));
 
     private TimeSpan Elapsed() => _breathing.Elapsed;
 

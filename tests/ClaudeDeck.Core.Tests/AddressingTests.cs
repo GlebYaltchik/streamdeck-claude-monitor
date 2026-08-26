@@ -93,6 +93,30 @@ public class AddressingTests
         Assert.NotNull(addressing.Current(Now));
     }
 
+    /// <summary>
+    /// Two presses arriving together must not both find the address live: the second would be
+    /// answering a question nobody addressed, which is what the window exists to stop.
+    /// </summary>
+    [Fact]
+    public void Taking_the_address_leaves_none_behind()
+    {
+        var addressing = new Addressing();
+        addressing.Address("session-1", "Bash", "npm test", Now);
+
+        Assert.Equal("session-1", addressing.Take(Now)?.SessionId);
+        Assert.Null(addressing.Take(Now));
+        Assert.Null(addressing.Current(Now));
+    }
+
+    [Fact]
+    public void A_lapsed_address_cannot_be_taken()
+    {
+        var addressing = new Addressing();
+        addressing.Address("session-1", "Bash", "npm test", Now);
+
+        Assert.Null(addressing.Take(Now + Addressing.Window));
+    }
+
     [Fact]
     public void A_lapsed_address_is_announced_once()
     {

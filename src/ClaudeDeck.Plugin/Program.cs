@@ -41,16 +41,19 @@ internal static class Program
         var roles = new AnswerRoles();
         var addressing = new Addressing();
 
-        Func<string, ApprovalDecision, Task<bool>> decide =
-            (session, decision) => hub.DecideAsync(session, decision.Behaviour, decision.Message);
-
         var usageAction = new UsageAction(connection, usage);
         var summaryAction = new SummaryAction(connection, hub.Agents);
         var queue = new PendingQueue(hub.Agents, addressing);
 
-        // Before the session keys: a tap on one means something different once a pair is on
-        // the deck, and the pair is what knows whether there is one.
-        var answerAction = new AnswerAction(connection, modes, roles, addressing, queue, decide);
+        // Before the session keys: a tap on one does an extra thing when a pair is on the
+        // page, and the pair is what knows whether there is one.
+        var answerAction = new AnswerAction(
+            connection,
+            modes,
+            roles,
+            addressing,
+            queue,
+            (session, decision) => hub.DecideAsync(session, decision.Behaviour, decision.Message));
         var sessionAction = new SessionAction(
             connection,
             hub.Agents,
@@ -58,8 +61,7 @@ internal static class Program
             modes,
             addressing,
             () => answerAction.Paired,
-            hub.ForgetSessionAsync,
-            decide);
+            hub.ForgetSessionAsync);
         var alertAction = new AlertAction(connection, alerts, () => sessionAction.Waiting());
         var modeAction = new ModeAction(connection, modes);
         var approvalAction = new ApprovalAction(connection, queue);
@@ -109,7 +111,7 @@ internal static class Program
         roles.Changed += answerAction.Refresh;
         roles.Changed += () => _ = RememberAsync(connection, modes, roles);
 
-        // A session key answers only in active mode, and says so by its colour.
+        // A waiting slot says by its colour whether the deck could answer it at all.
         modes.Changed += sessionAction.Refresh;
 
         connection.EventReceived += deckEvent =>

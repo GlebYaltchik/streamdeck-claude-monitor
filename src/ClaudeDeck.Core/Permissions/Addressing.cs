@@ -73,7 +73,30 @@ public sealed class Addressing
         Changed?.Invoke();
     }
 
-    public void Drop() => Clear(_ => true);
+    /// <summary>
+    /// Takes the address and leaves none behind, in one step. Two presses arriving together
+    /// would otherwise both find it live and both answer: the second would be answering a
+    /// question nobody addressed, which is the whole thing the window exists to stop.
+    /// </summary>
+    public Addressed? Take(DateTimeOffset now)
+    {
+        Addressed? taken;
+        bool cleared;
+
+        lock (_gate)
+        {
+            taken = _current is { } address && now < address.Until ? address : null;
+            cleared = _current is not null;
+            _current = null;
+        }
+
+        if (cleared)
+        {
+            Changed?.Invoke();
+        }
+
+        return taken;
+    }
 
     /// <summary>Drops an address that has run out. The clock is the only thing that notices.</summary>
     public void Expire(DateTimeOffset now) => Clear(address => now >= address.Until);

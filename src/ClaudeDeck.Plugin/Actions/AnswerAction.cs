@@ -104,15 +104,12 @@ internal sealed class AnswerAction(
             return;
         }
 
-        if (Role(context) is not { } role || addressing.Current(DateTimeOffset.UtcNow) is not { } addressed)
+        // Taken rather than read: the address is gone the moment this press has it, so a
+        // second press arriving alongside finds nothing and answers nothing.
+        if (Role(context) is not { } role || addressing.Take(DateTimeOffset.UtcNow) is not { } addressed)
         {
             return;
         }
-
-        // Dropped before the answer is sent, not after. The question is about to be closed
-        // either way, and an address outliving its own question is how the next one gets
-        // answered by a press meant for this.
-        addressing.Drop();
 
         _ = AnswerAsync(role, addressed);
     }
@@ -123,11 +120,14 @@ internal sealed class AnswerAction(
             ? new ApprovalDecision(ApprovalDecision.Allow, null)
             : ApprovalDecision.Denied();
 
-        var reached = await decide(addressed.SessionId, decision);
+        // Sent, not answered. All the hub reports is that an agent took the message; whether
+        // it reached a question still being held is the agent's to log, and a plugin line
+        // claiming the answer landed is one that will eventually be believed wrongly.
+        var sent = await decide(addressed.SessionId, decision);
 
-        PluginLog.Write(reached
-            ? decision.Behaviour + " for " + addressed.Tool + " from the answer pair"
-            : "nothing left to answer for " + addressed.Tool);
+        PluginLog.Write(sent
+            ? decision.Behaviour + " sent for " + addressed.Tool
+            : "no agent to answer " + addressed.Tool);
     }
 
     /// <summary>Redraws the pair. Safe to call from the hub's threads.</summary>

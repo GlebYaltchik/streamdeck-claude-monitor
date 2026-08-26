@@ -44,12 +44,16 @@
   <div class="field">
     <div class="row">
       <input id="answering" type="checkbox">
-      <label for="answering">Answer permission requests from session keys</label>
+      <label for="answering">Answer permission requests from the deck</label>
     </div>
     <p class="hint">
-      With this on, a tap on a waiting session key denies what it is asking for and a hold
-      allows it. With it off the deck still shows which session is waiting, and the question is
-      answered in the session's own window as usual.
+      Answering takes a pair of Answer keys: tap a waiting session key to aim the pair at it,
+      then press Allow or Deny. A session key never answers anything itself — a tap
+      acknowledges and a hold clears it, whatever it is doing.
+    </p>
+    <p class="hint">
+      With this off the deck still shows which session is waiting, and the question is answered
+      in the session's own window as usual.
     </p>
     <p class="hint">
       This is the same setting an Approvals key carries, so a deck with one of those does not

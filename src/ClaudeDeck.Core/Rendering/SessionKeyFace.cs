@@ -119,8 +119,10 @@ public static class SessionKeyFace
     /// the swell is read at the edge of vision without the face becoming unreadable.
     /// </param>
     /// <param name="answerable">
-    /// Whether a press on this key would answer the question it is showing. Only the colour
-    /// changes: a key that can act and one that cannot must not be told apart by reading.
+    /// Whether the question this key is showing could be answered from the deck at all. Not a
+    /// press on this key - nothing here answers anything - but whether the deck carries what
+    /// it would take. Only the colour changes: a question that can be dealt with here and one
+    /// that has to be walked to must not be told apart by reading.
     /// </param>
     /// <param name="addressed">
     /// Whether this is the session the answer pair is currently armed for. Drawn as a frame,

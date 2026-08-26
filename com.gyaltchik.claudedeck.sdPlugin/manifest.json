@@ -48,7 +48,7 @@
       "Name": "Session",
       "UUID": "com.gyaltchik.claudedeck.session",
       "Icon": "imgs/key",
-      "Tooltip": "One Claude Code session: what it is called, what it is doing, and how full its context is. It flashes when its turn ends; tap to acknowledge, hold to clear a session that is gone.",
+      "Tooltip": "One Claude Code session: what it is called, what it is doing, and how full its context is. It flashes when its turn ends; tap to acknowledge, hold to clear a session that is gone. With an Allow / Deny pair on the same page, a tap also aims the pair at this session.",
       "Controllers": [
         "Keypad"
       ],
@@ -94,7 +94,7 @@
       "Name": "Approvals",
       "UUID": "com.gyaltchik.claudedeck.mode",
       "Icon": "imgs/key",
-      "Tooltip": "How far the deck is allowed into permission decisions: off, observe or active.",
+      "Tooltip": "How far the deck is allowed into permission decisions: watch only, or answer from the deck.",
       "Controllers": [
         "Keypad"
       ],

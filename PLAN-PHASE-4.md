@@ -179,14 +179,20 @@ press can say which session they mean.
 
 ### Step 7: Address one session, then answer it with the pair
 
-- **Change:** What makes a standalone answer key honest: with the pair present and the mode
-  `active`, a tap on a waiting session key no longer denies — it makes that session the one the
-  deck is talking about for **twenty seconds** and arms the pair, and Allow or Deny then answers
-  it. Without a pair on the deck nothing changes: a tap denies and a hold allows, as now.
+- **Change:** What makes a standalone answer key honest: with a pair on the page and the mode
+  `active`, a tap on a waiting session key makes that session the one the deck is talking about
+  for **twenty seconds** and arms the pair, and Allow or Deny then answers it.
 
-  **The hold stops answering once the pair exists.** With the pair, answering is always two
-  presses; leaving the hold would keep a command reachable in one gesture and give two ways to
-  do the same thing, and the pair is the one that can say which session it means.
+  **The session key stops answering altogether**, which is more than this step set out to do
+  and is the only version that cannot be got wrong. A tap acknowledges and a hold clears,
+  always, whatever state the session is in; a pair on the page adds a second meaning to the tap
+  rather than replacing the first. Step 4 had the tap deny and the hold allow, and once the
+  pair existed those meanings turned on whether it happened to be on the page being shown —
+  which nobody pressing can see, because Stream Deck only tells a plugin about visible keys. A
+  gesture decided by invisible state is one somebody is eventually wrong about, and being wrong
+  about that one ran a command. Clearing a session stopped at a question is allowed for the
+  same reason: it only takes the session off the deck, and the question stays answerable where
+  it has been all along.
 
   The address is dropped when it is used, when the same key is tapped again, after twenty
   seconds, and **when the question it was for is gone** — answered in the session's own window,
