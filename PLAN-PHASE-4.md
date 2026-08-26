@@ -44,9 +44,11 @@ press can say which session they mean.
   reach the deck.
 - The return channel exists — hold-to-clear added the first hub-to-agent message and the
   addressing that finds the agent owning a session.
-- Decisions are honoured in `default` mode (labelled **Manual**) and `dontAsk`. In `auto`,
-  `acceptEdits` and the rest the hook fires and its decision is ignored, so the deck must say so
-  rather than pretend.
+- Decisions are honoured in `default` mode (labelled **Manual**), in `dontAsk` and in
+  `acceptEdits` — the last one measured on 2026-08-26, after this plan was written, and
+  correcting a claim that had been generalised rather than measured. `auto` is untested and the
+  deck does not offer to answer it. A session is shown as waiting in **every** mode; only the
+  offer to answer is gated.
 - Measured on the **desktop application**, Claude Code 2.1.237. The terminal CLI is not
   installed on this machine and is untested.
 - Every permission test is interactive and in a fresh session; hook reloading inside a running

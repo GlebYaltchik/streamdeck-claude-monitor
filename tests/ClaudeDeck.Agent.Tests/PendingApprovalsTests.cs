@@ -81,19 +81,28 @@ public class PendingApprovalsTests
     }
 
     /// <summary>
-    /// Holding a question whose answer the client would ignore stalls the session and gains
-    /// nothing, so a mode that does not honour a decision is not held for.
+    /// A mode whose prompt the deck can answer is held for; one whose decision the client
+    /// would ignore is not, because a key that answers nothing should not be offered.
+    ///
+    /// acceptEdits is held for now: it accepts edits on its own and stops for everything else
+    /// with the ordinary prompt, and whether it honours an outside decision has never been
+    /// measured on its own - see PermissionModes.
     /// </summary>
-    [Fact]
-    public void A_question_nobody_could_answer_from_outside_is_not_held()
+    [Theory]
+    [InlineData("default", true)]
+    [InlineData("manual", true)]
+    [InlineData("dontAsk", true)]
+    [InlineData("acceptEdits", true)]
+    [InlineData("auto", false)]
+    [InlineData(null, false)]
+    public void Only_a_mode_that_could_honour_an_answer_is_held_for(string? mode, bool held)
     {
         var approvals = new PendingApprovals(new SessionRegistry(), TimeSpan.Zero, _ => { });
 
-        Assert.True(approvals.Holds(Request("default")));
-        Assert.False(approvals.Holds(Request("auto")));
+        Assert.Equal(held, approvals.Holds(Request(mode)));
     }
 
-    private static HookEvent Request(string mode) =>
+    private static HookEvent Request(string? mode) =>
         new("PermissionRequest", "session-1", Start, PermissionMode: mode, ToolName: "Bash");
 
     private static SessionRegistry Waiting()

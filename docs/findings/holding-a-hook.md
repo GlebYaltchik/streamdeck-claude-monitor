@@ -50,9 +50,9 @@ Four constraints, each of which cost a measurement round to learn:
 - **An unknown or invalid field fails schema validation for the whole response**, which the
   client treats as a non-blocking error: the prompt appears and waits. That is also the
   fail-safe — a malformed answer can never approve anything.
-- **Decisions are honoured in `default` mode (labelled Manual) and `dontAsk`.** In `auto`,
-  `acceptEdits` and the rest the hook still fires and its decision is ignored, so the agent must
-  read `permission_mode` from the payload and not pretend it can decide.
+- **Decisions are honoured in `default` mode (labelled Manual), in `dontAsk`, and in
+  `acceptEdits`.** The agent still reads `permission_mode` from the payload rather than
+  assuming, but the list is wider than this finding first claimed - see the correction below.
 - **`message` belongs to `deny` only.** Sending it beside `allow` is an unknown field.
 
 ## What the payload carries
@@ -95,6 +95,48 @@ The earlier measurements stand and are what the fallback would rest on:
 - **A hold is invisible.** During a 45 s `PreToolUse` hold the screen shows the ordinary running
   state — spinner, elapsed counter, `Running tools...` — with nothing naming the hook and no
   offer to stop waiting.
+
+## Correction: `acceptEdits` honours a decision (2026-08-26)
+
+The bullet above once read "in `auto`, `acceptEdits` and the rest the hook still fires and its
+decision is ignored". **That was a generalisation, not a measurement.** No row of the table
+above names a mode; every case in it was run in `default`. `acceptEdits` was swept in with
+`auto` on the assumption that a mode with "accept" in its name decides for itself.
+
+It does not decide for itself. It accepts edits and stops for everything else, with the
+ordinary three-way prompt - allow once, allow always, deny - in front of a person.
+
+**Measured on Claude Code in WSL2 (Ubuntu-24.04), one fresh session in `acceptEdits`, with the
+agent holding and the answer given on the Stream Deck:**
+
+| Tool | Sent from the deck | Result |
+|---|---|---|
+| `Write` | `allow` | prompt dismissed, the write ran |
+| `Bash` | `deny` | prompt dismissed, the call blocked |
+
+Both were in the same session, one after the other, and both sides logged the round trip: the
+plugin recorded `allow sent for Write` and `deny sent for Bash`, the agent
+`answered on the deck: allow` and `answered on the deck: deny`.
+
+`auto` is untested and stays out of the list. The claim about it has exactly the standing the
+`acceptEdits` claim had until today, and should be measured before it is trusted.
+
+### The reasoning that kept the list narrow was also wrong
+
+The stated cost of holding a request in a mode that ignores decisions was that it "stalls the
+session for the length of the hold and gains nothing". It cannot: **the event fires only when
+the client is about to ask a person**, so a session whose request is held is already standing
+still in front of somebody. The prompt is on screen the whole time and answering it there
+closes ours. Holding costs nothing in any mode; the only thing the mode decides is whether our
+answer counts.
+
+### What the mode must never decide
+
+Whether a session is **shown as waiting**. That was gated on the same list, and a session
+stopped on an `mcp__youtrack__update_issue` prompt in `acceptEdits` was drawn on the deck as
+working while its owner sat looking at the question - the deck claiming a session is busy while
+a person waits is the exact failure it exists to prevent. Waiting is now marked in every mode,
+and only the offer to answer is gated.
 
 ## Traps
 
