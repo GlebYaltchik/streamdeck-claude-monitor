@@ -17,8 +17,6 @@ using ClaudeDeck.Protocol;
 
 const int DefaultPort = 17800;
 
-const string PermissionRequest = "PermissionRequest";
-
 var port = Environment.GetEnvironmentVariable("CLAUDEDECK_AGENT_PORT") is { } configured &&
            int.TryParse(configured, out var parsed)
     ? parsed
