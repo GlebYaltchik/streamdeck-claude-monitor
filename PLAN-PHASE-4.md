@@ -1,13 +1,18 @@
 # Plan: ClaudeDeck phase 4 — answer permission prompts from the deck
 
-<!-- 10 steps: 1 observe, 2 switch, 3 show, 4 answer, 5 settings, 6-7 pair, 8 danger, 9-10 remember. -->
+<!-- 8 steps: 1 observe, 2 switch, 3 show, 4 answer, 5 settings, 6-7 pair, 8 danger. Complete. -->
 
 ## Goal
 
-Answer Claude Code's permission prompts from the Stream Deck, with console parity — **Allow**,
-**Allow always**, **Deny** — **without taking the prompt away from the session**. The question
-stays on screen exactly as it does today; the deck is a second way to answer it, for the
-sessions you are not looking at.
+Answer Claude Code's permission prompts from the Stream Deck — **Allow** and **Deny** —
+**without taking the prompt away from the session**. The question stays on screen exactly as it
+does today; the deck is a second way to answer it, for the sessions you are not looking at.
+
+Console parity was the goal at first, and **Allow always** was dropped rather than built. A key
+carries too little to decide by: a one-off allow is bounded by the command in front of you,
+while a standing rule is unbounded and reaches commands nobody has seen yet. The deck is a
+place to answer a question already on screen, not a place to write policy. See "Allow always,
+and why it is not here" below.
 
 ## What changed since this plan was first written
 
@@ -67,10 +72,6 @@ press can say which session they mean.
 - **`allow` from a key is irreversible the moment the command runs.** Unchanged from the
   original plan: a long press (Step 4), danger classification (Step 8), and the command shown
   before the key can be pressed (Step 3).
-- **"Allow always" writes into the user's permission state.** `permission_suggestions` name
-  their own destination, and `localSettings` means editing a file inside the user's repository
-  from a key press. Step 9 keeps the decision ours: an agent-side store by default, so a
-  mistaken press is revocable from the deck (Step 10).
 - **Only the desktop application is measured.** Anything that turns out to be app-specific
   belongs in a finding, not in a workaround.
 
@@ -240,34 +241,30 @@ press can say which session they mean.
   about to press it, which is the difference between this and the state-dependent gestures Step
   7 removed.
 - **Files:** `src/ClaudeDeck.Core/Permissions/Danger.cs`,
-  `src/ClaudeDeck.Core/Rendering/AnswerKeyFace.cs`, `src/ClaudeDeck.Plugin/Actions/AnswerAction.cs`,
-  `tests/ClaudeDeck.Core.Tests/*`
+  `src/ClaudeDeck.Core/Rendering/AnswerKeyFace.cs`,
+  `src/ClaudeDeck.Plugin/Actions/AnswerAction.cs`, `tests/ClaudeDeck.Core.Tests/*`
 - **Verify:** `dotnet test` over a table of real command shapes, including ordinary work that
   must **not** trip it; on the device a dangerous call turns the Allow key red and a press does
   nothing until it is held
 - **Commit:** `core: mark dangerous requests and make them harder to allow`
 
-### Step 9: Remember an "allow always"
+## Allow always, and why it is not here
 
-- **Change:** The third console answer. The protocol offers `permission_suggestions` and would
-  write the rule into the user's own settings; we keep the rule in **the agent's store**
-  instead, matching design §6.2 — an accidental press must not edit a file inside the user's
-  repository. A remembered rule then answers matching requests without the deck being touched.
-- **Files:** `src/ClaudeDeck.Agent/*`, `src/ClaudeDeck.Core/Permissions/*`,
-  `tests/ClaudeDeck.Agent.Tests/*`
-- **Verify:** `dotnet test`; interactively, a command allowed always runs without a prompt on
-  its second use, in a fresh session, with the deck untouched
-- **Commit:** `agent: remember an allow-always decision`
+Two steps were planned for it: remember the rule in the agent's own store rather than in the
+user's settings, then list and revoke what had accumulated. Both are dropped, and not for cost.
 
-### Step 10: List and revoke remembered rules from the deck
+**A key shows too little to take a decision that outlives the question.** Everything the deck
+knows about a request is one line — the tool and as much of the command as fits — and that is
+enough to answer *this* call, which is bounded and in front of you. A standing rule is neither:
+it reaches calls nobody has seen yet, and the difference between a rule that is fine and a rule
+that is a hole is usually in the part the key could not show.
 
-- **Change:** Without revocation, "allow always" is an irreversible decision taken by a key that
-  is easy to press by accident — part of Step 9's safety, not a nicety. The encoder lists what
-  has accumulated and a press takes one back.
-- **Files:** `src/ClaudeDeck.Plugin/Actions/*`, `src/ClaudeDeck.Agent/*`
-- **Verify:** on the device, a rule added in Step 9 is listed and can be removed, after which
-  the same command prompts again
-- **Commit:** `plugin: list and revoke remembered allow-always rules`
+Design §6.4-4 already said no approval for something the user cannot read. Allow-always is the
+case where that rule bites hardest, because what has to be read is not on screen at all.
+
+The revocation step went with it. It existed only to take back what the remembering step could
+create, and a decision the deck cannot make needs no undo. The prompt in the session still
+offers all three answers, and the third one is given there, where the whole command is.
 
 ## Asked for, and deliberately not now
 
@@ -285,9 +282,10 @@ Both came from the device and are worth keeping; neither belongs in a step of th
 
 ## Out of scope
 
-- **Mirroring a remembered rule into `settings.local.json`.** Available through
-  `updatedPermissions` with a `localSettings` destination, and design §6.2 keeps it as an
-  explicit opt-in. An opt-in nobody has asked for is not worth building yet.
+- **Anything that writes to the user's permission state.** `permission_suggestions` arrive in
+  every payload and `updatedPermissions` would write them into `settings.local.json`, a file
+  inside the user's repository. Nothing in this phase touches it, and with allow-always gone
+  there is no longer a reason to.
 - **Moving the monitoring hooks off `curl` to the `http` type.** The `http` type works and would
   remove the shim from phase 5 as well, but converting the seven working hooks is separate from
   this phase and belongs with `claudedeck agent install`.
