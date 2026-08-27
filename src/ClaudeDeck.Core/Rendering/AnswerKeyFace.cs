@@ -19,6 +19,15 @@ namespace ClaudeDeck.Core.Rendering;
 ///
 /// Allow and Deny are the one place on this deck where green and red mean what everybody
 /// already reads them as.
+///
+/// A dangerous request therefore cannot be red - red is already Deny, and two red keys side by
+/// side say neither. It is the background that turns, which is the rule the session key has
+/// used since the beginning: the state is behind the words and the words keep their own
+/// meaning. The word stays "allow" and stays green, so the key still says which half of the
+/// pair it is while shouting about what it is holding.
+///
+/// The warning is on Allow alone. It belongs where the permission is given, and Deny gives
+/// none.
 /// </summary>
 public static class AnswerKeyFace
 {
@@ -43,6 +52,14 @@ public static class AnswerKeyFace
     /// </summary>
     private const string Disabled = "#414850";
 
+    /// <summary>
+    /// Behind a dangerous request. Dark enough that a green word and a light bar stay readable
+    /// on it, saturated enough that it is the first thing seen.
+    /// </summary>
+    private const string DangerBackground = "#5c1d1d";
+
+    private const string DangerLabel = "#ffb3b3";
+
     /// <param name="keys">
     /// How many answer keys are on the deck. Anything but two is not a pair, and every one of
     /// them says what to do about it.
@@ -62,12 +79,17 @@ public static class AnswerKeyFace
     /// nothing is addressed. It replaces the instruction rather than joining it — the press it
     /// was asking for has happened, and what matters now is how long there is to finish.
     /// </param>
+    /// <param name="dangerous">
+    /// Whether what is addressed is worth being made to work for. Shown on Allow and nowhere
+    /// else: the warning belongs where the permission is given.
+    /// </param>
     public static string Render(
         AnswerRole role,
         int keys,
         bool answering,
         bool waiting = false,
-        double? remaining = null)
+        double? remaining = null,
+        bool dangerous = false)
     {
         if (keys != 2)
         {
@@ -75,10 +97,11 @@ public static class AnswerKeyFace
         }
 
         var armed = answering && remaining is not null;
+        var warned = armed && dangerous && role == AnswerRole.Allow;
 
         var image = new KeyImage()
-            .Background(KeyPalette.Background)
-            .Text(Label, 30, 19, KeyPalette.Muted)
+            .Background(warned ? DangerBackground : KeyPalette.Background)
+            .Text(warned ? "DANGER" : Label, 30, 19, warned ? DangerLabel : KeyPalette.Muted, bold: warned)
             .Text(AnswerRoles.Name(role), 82, 30, Word(role, answering, armed), bold: true);
 
         if (!answering)

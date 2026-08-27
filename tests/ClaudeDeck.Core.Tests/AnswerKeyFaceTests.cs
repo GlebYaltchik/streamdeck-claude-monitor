@@ -124,6 +124,47 @@ public class AnswerKeyFaceTests
         Assert.Contains("#4f9d69", Decode(AnswerKeyFace.Render(AnswerRole.Allow, keys: 2, answering: true, remaining: 0.5)));
     }
 
+    /// <summary>
+    /// The warning goes where the permission is given. Red cannot be the word: red is Deny,
+    /// and two red words side by side say neither - so the background turns and the word keeps
+    /// saying which half of the pair this is.
+    /// </summary>
+    [Fact]
+    public void A_dangerous_request_turns_the_allow_key_and_says_so()
+    {
+        var armed = Decode(AnswerKeyFace.Render(
+            AnswerRole.Allow, keys: 2, answering: true, remaining: 0.5, dangerous: true));
+
+        Assert.Contains(">DANGER<", armed);
+        Assert.Contains("#5c1d1d", armed);
+        Assert.Contains(">allow<", armed);
+        Assert.Contains("#4f9d69", armed);
+    }
+
+    /// <summary>Denying runs nothing, so it carries no warning and is never made harder.</summary>
+    [Fact]
+    public void The_deny_key_carries_no_warning()
+    {
+        var deny = Decode(AnswerKeyFace.Render(
+            AnswerRole.Deny, keys: 2, answering: true, remaining: 0.5, dangerous: true));
+
+        Assert.DoesNotContain("DANGER", deny);
+        Assert.DoesNotContain("#5c1d1d", deny);
+    }
+
+    /// <summary>
+    /// Nothing addressed, nothing to warn about. The classification belongs to a question, and
+    /// with no question the pair has no opinion.
+    /// </summary>
+    [Fact]
+    public void A_pair_with_nothing_addressed_shows_no_warning()
+    {
+        var idle = Decode(AnswerKeyFace.Render(
+            AnswerRole.Allow, keys: 2, answering: true, waiting: true, dangerous: true));
+
+        Assert.DoesNotContain("DANGER", idle);
+    }
+
     private static string Decode(string dataUrl)
     {
         const string prefix = "data:image/svg+xml;base64,";

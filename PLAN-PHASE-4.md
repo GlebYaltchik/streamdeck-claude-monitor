@@ -221,13 +221,30 @@ press can say which session they mean.
 ### Step 8: Classify dangerous commands and say so
 
 - **Change:** `rm -rf`, `git push --force`, `curl | sh`, `sudo`, writes outside the working
-  directory and paths that look like secrets. A dangerous call turns the key red and takes a
-  deliberately longer hold. The classifier errs towards calling things dangerous: the cost is a
-  longer press, and the cost of the opposite is the whole point of §6.4.
-- **Files:** `src/ClaudeDeck.Core/Permissions/*`, `src/ClaudeDeck.Plugin/Actions/*`,
+  directory and paths that look like secrets. The classifier errs towards calling things
+  dangerous: the cost is a longer press, and the cost of the opposite is the whole point of
+  §6.4.
+
+  **The warning goes where the permission is given**, which is the Allow key — the pair is what
+  answers now, and Deny gives nothing away, so it carries no warning and is never made harder.
+  If a compact mode ever puts answering back on a session key, the warning goes there instead,
+  by the same rule.
+
+  It is the **background** that turns red rather than the word. Red already means Deny on this
+  deck, and an Allow key coloured red would put two red words side by side saying neither. The
+  background is where this deck has kept state since the session key was drawn; the word stays
+  `allow`, stays green, and goes on saying which half of the pair it is.
+
+  A dangerous allow is **held rather than pressed** — 1500 ms, longer than any hold a slot key
+  has asked for. The gesture that changes is on the key that changed, in front of the person
+  about to press it, which is the difference between this and the state-dependent gestures Step
+  7 removed.
+- **Files:** `src/ClaudeDeck.Core/Permissions/Danger.cs`,
+  `src/ClaudeDeck.Core/Rendering/AnswerKeyFace.cs`, `src/ClaudeDeck.Plugin/Actions/AnswerAction.cs`,
   `tests/ClaudeDeck.Core.Tests/*`
-- **Verify:** `dotnet test` over a table of real command shapes; on the device a dangerous call
-  is red and does not yield to the ordinary hold
+- **Verify:** `dotnet test` over a table of real command shapes, including ordinary work that
+  must **not** trip it; on the device a dangerous call turns the Allow key red and a press does
+  nothing until it is held
 - **Commit:** `core: mark dangerous requests and make them harder to allow`
 
 ### Step 9: Remember an "allow always"

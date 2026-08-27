@@ -8,7 +8,12 @@ namespace ClaudeDeck.Core.Permissions;
 /// different question — and an address that survived the change would answer the second one
 /// with a press meant for the first.
 /// </summary>
-public sealed record Addressed(string SessionId, string Tool, string? Summary, DateTimeOffset Until);
+public sealed record Addressed(
+    string SessionId,
+    string Tool,
+    string? Summary,
+    bool Dangerous,
+    DateTimeOffset Until);
 
 /// <summary>
 /// Which session a press on the answer pair means.
@@ -59,7 +64,7 @@ public sealed class Addressing
     /// Addresses this session, or drops the address when this session is the one already
     /// addressed — pressing the same key twice means never mind.
     /// </summary>
-    public void Address(string sessionId, string tool, string? summary, DateTimeOffset now)
+    public void Address(string sessionId, string tool, string? summary, bool dangerous, DateTimeOffset now)
     {
         lock (_gate)
         {
@@ -67,7 +72,7 @@ public sealed class Addressing
 
             _current = live?.SessionId == sessionId
                 ? null
-                : new Addressed(sessionId, tool, summary, now + Window);
+                : new Addressed(sessionId, tool, summary, dangerous, now + Window);
         }
 
         Changed?.Invoke();

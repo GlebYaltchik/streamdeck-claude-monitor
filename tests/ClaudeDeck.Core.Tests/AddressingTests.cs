@@ -11,7 +11,7 @@ public class AddressingTests
     {
         var addressing = new Addressing();
 
-        addressing.Address("session-1", "Bash", "npm test", Now);
+        addressing.Address("session-1", "Bash", "npm test", dangerous: false, Now);
 
         Assert.Equal("session-1", addressing.Current(Now)?.SessionId);
     }
@@ -22,8 +22,8 @@ public class AddressingTests
     {
         var addressing = new Addressing();
 
-        addressing.Address("session-1", "Bash", "npm test", Now);
-        addressing.Address("session-1", "Bash", "npm test", Now);
+        addressing.Address("session-1", "Bash", "npm test", dangerous: false, Now);
+        addressing.Address("session-1", "Bash", "npm test", dangerous: false, Now);
 
         Assert.Null(addressing.Current(Now));
     }
@@ -33,8 +33,8 @@ public class AddressingTests
     {
         var addressing = new Addressing();
 
-        addressing.Address("session-1", "Bash", "npm test", Now);
-        addressing.Address("session-2", "Edit", "src/Program.cs", Now);
+        addressing.Address("session-1", "Bash", "npm test", dangerous: false, Now);
+        addressing.Address("session-2", "Edit", "src/Program.cs", dangerous: false, Now);
 
         Assert.Equal("session-2", addressing.Current(Now)?.SessionId);
     }
@@ -48,7 +48,7 @@ public class AddressingTests
     {
         var addressing = new Addressing();
 
-        addressing.Address("session-1", "Bash", "npm test", Now);
+        addressing.Address("session-1", "Bash", "npm test", dangerous: false, Now);
 
         Assert.NotNull(addressing.Current(Now + Addressing.Window - TimeSpan.FromSeconds(1)));
         Assert.Null(addressing.Current(Now + Addressing.Window));
@@ -59,7 +59,7 @@ public class AddressingTests
     {
         var addressing = new Addressing();
 
-        addressing.Address("session-1", "Bash", "npm test", Now);
+        addressing.Address("session-1", "Bash", "npm test", dangerous: false, Now);
 
         Assert.Equal(1, addressing.Remaining(Now));
         Assert.Equal(0.5, addressing.Remaining(Now + (Addressing.Window / 2)), 2);
@@ -75,7 +75,7 @@ public class AddressingTests
     public void An_address_is_dropped_when_its_own_question_is_gone()
     {
         var addressing = new Addressing();
-        addressing.Address("session-1", "Bash", "npm test", Now);
+        addressing.Address("session-1", "Bash", "npm test", dangerous: false, Now);
 
         addressing.Settle([("session-1", "Bash", "rm -rf build")]);
 
@@ -86,7 +86,7 @@ public class AddressingTests
     public void An_address_survives_while_its_own_question_is_still_open()
     {
         var addressing = new Addressing();
-        addressing.Address("session-1", "Bash", "npm test", Now);
+        addressing.Address("session-1", "Bash", "npm test", dangerous: false, Now);
 
         addressing.Settle([("session-2", "Edit", "src/Program.cs"), ("session-1", "Bash", "npm test")]);
 
@@ -101,7 +101,7 @@ public class AddressingTests
     public void Taking_the_address_leaves_none_behind()
     {
         var addressing = new Addressing();
-        addressing.Address("session-1", "Bash", "npm test", Now);
+        addressing.Address("session-1", "Bash", "npm test", dangerous: false, Now);
 
         Assert.Equal("session-1", addressing.Take(Now)?.SessionId);
         Assert.Null(addressing.Take(Now));
@@ -112,7 +112,7 @@ public class AddressingTests
     public void A_lapsed_address_cannot_be_taken()
     {
         var addressing = new Addressing();
-        addressing.Address("session-1", "Bash", "npm test", Now);
+        addressing.Address("session-1", "Bash", "npm test", dangerous: false, Now);
 
         Assert.Null(addressing.Take(Now + Addressing.Window));
     }
@@ -123,7 +123,7 @@ public class AddressingTests
         var addressing = new Addressing();
         var changes = 0;
 
-        addressing.Address("session-1", "Bash", "npm test", Now);
+        addressing.Address("session-1", "Bash", "npm test", dangerous: false, Now);
         addressing.Changed += () => changes++;
 
         addressing.Expire(Now + TimeSpan.FromSeconds(1));

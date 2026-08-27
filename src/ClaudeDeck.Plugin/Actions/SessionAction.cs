@@ -213,6 +213,7 @@ internal sealed class SessionAction(
                 asking.Id,
                 asking.PendingTool!,
                 asking.PendingSummary,
+                Danger.Suspects(asking.PendingTool, asking.PendingSummary, asking.Cwd),
                 DateTimeOffset.UtcNow);
         }
 
